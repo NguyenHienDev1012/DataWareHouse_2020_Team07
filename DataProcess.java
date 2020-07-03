@@ -24,9 +24,10 @@ import utils.ControlDB;
 public class DataProcess {
 	static final String NUMBER_REGEX = "^[0-9]+$";
 	private ControlDB controlDb;
-	public DataProcess() {
+	
+	public void trunCateTable(String dbName, String tableName){
+		String sql="";
 	}
-
 	private String readLines(String value, String delim) {
 		String values = "";
 		StringTokenizer stoken = new StringTokenizer(value, delim);
@@ -47,6 +48,7 @@ public class DataProcess {
 		}
 		return values;
 	}
+
 
 	public String readValuesTXT(File s_file, String delim) {
 		String values = "";
@@ -74,8 +76,6 @@ public class DataProcess {
 			XSSFWorkbook workBooks = new XSSFWorkbook(fileIn);
 			XSSFSheet sheet = workBooks.getSheetAt(0);
 			Iterator<Row> rows = sheet.iterator();
-			int x=0;
-			int b=0;
 			rows.next();
 			while (rows.hasNext()) {
 				Row row = rows.next();
@@ -91,7 +91,6 @@ public class DataProcess {
 						} else {
 							value += (long) cell.getNumericCellValue() + "|";
 						}
-						b++;	
 						break;
 					case STRING:
 						value += cell.getStringCellValue() + "|";
@@ -116,7 +115,7 @@ public class DataProcess {
 		}
 	}
 
-	public boolean writeDataToBD(String column_list, String target_table, String values) {
+	public boolean writeDataToStagingDB(String column_list, String target_table, String values) {
 		if (controlDb.insertValues(column_list, values, target_table))
 			return true;
 		return false;
