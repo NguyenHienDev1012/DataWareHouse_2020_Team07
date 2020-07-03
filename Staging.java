@@ -19,6 +19,7 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
+import notification.SendMail;
 import utils.ControlDB;
 
 public class Staging {
@@ -27,6 +28,7 @@ public class Staging {
 	private DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
 	private LocalDateTime now = LocalDateTime.now();
 	private String timestamp = dtf.format(now); 
+	private String emailAddress="nguyenthanhhien.itnlu@gmail.com";
 	
 	private final String FILE_STATUS_READY="ER";
 	private final String FILE_STATUS_TRANSFORM="TR";
@@ -57,10 +59,21 @@ public class Staging {
 			File imp_dir = new File(import_dir);
 			if (imp_dir.exists()) {
 				File[] listFile = imp_dir.listFiles();
+				if(listFile.length>0){
 				for(File f: listFile){
 						dp.getControlDb().insertLogFileStatus(table_name, f.getName(), config_id, FILE_STATUS_READY,timestamp);
 				}
+				
+				SendMail.sendMail(emailAddress, "URGENT FILE INFORMATION",
+						"Load file status successfully!");
 				System.out.println("Load file status successfully!");
+			}
+				else{
+					SendMail.sendMail(emailAddress, "URGENT FILE INFORMATION",
+							"No any file here to load file status!");
+					System.out.println("No any file here to load file status!");
+				}
+				
 			}
 			else{
 				System.out.println("Path not exists!!!");
@@ -143,6 +156,9 @@ public class Staging {
 					 
 				}
 				else{
+				SendMail.sendMail(emailAddress, "URGENT FILE INFORMATION",
+						"Don't have any file_status is ready to load into staging db!");
+				
 					System.out.println("Don't have any file_status is ready to load into staging db! ");
 				}
 			}
@@ -221,7 +237,7 @@ public class Staging {
 		DataProcess dp=new DataProcess();
 		dp.setControlDb(controlDb);
 	    //staging.loadFileStatus(dp,"log_file");
-       staging.extractToStagingDB(dp);
+        staging.extractToStagingDB(dp);
        //File f=new File("C:/Users/PC/Desktop/LEARNING/Data/File/sinhvien_sang_nhom14.xlsx");
        //System.out.println(dp.readValuesXLSX(f));
        //loadToDW(int id_file);
