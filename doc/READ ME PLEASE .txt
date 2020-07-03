@@ -1,0 +1,7 @@
+mình làm phàn 3, có đụng tới 2 database là stagingdb và datawarehouse
+stagingdb có 2 bảng là 
+	student : cái này là mẫu của Hiền đưa, có định dạng khác nhau
+	studentstaging : cái này mình chuyển cái trên sang text theo như thầy nói để làm dữ liệu đọc sau này.
+datawarehouse có 2 bảng là
+	configformat : Chứa định các field muốn lấy từ Staging ,format của fields nó, tên tabel datawarehouse
+	student : đây là datawarehouse chính, có chứa định dạng chuẩn .
