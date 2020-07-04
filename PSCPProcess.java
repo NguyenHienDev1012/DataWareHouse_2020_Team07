@@ -4,15 +4,15 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
+import notification.SendMail;
 import utils.ControlDB;
 import utils.DBConnection;
-
 public class PSCPProcess {
 	public DBConnection dbConnection=new DBConnection();
 	public ControlDB controlDB=new ControlDB("controldb", "", "scp_download");
 	public PreparedStatement ptmt=null;
 	public ResultSet rs=null;
-	
+	private String emailAddress="nguyenthanhhien.itnlu@gmail.com";
 	
 	public String selectField(int id_scp, String table, String field) throws SQLException{
 		String sql = "SELECT " + field + " FROM " +table + " WHERE id=?";

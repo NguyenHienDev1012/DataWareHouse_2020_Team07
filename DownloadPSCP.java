@@ -5,8 +5,9 @@ import java.sql.SQLException;
 import com.chilkatsoft.CkGlobal;
 import com.chilkatsoft.CkScp;
 import com.chilkatsoft.CkSsh;
-
+import notification.SendMail;
 public class DownloadPSCP {
+	private String emailAddress="nguyenthanhhien.itnlu@gmail.com";
 	static {
 		try {
 			System.loadLibrary("chilkat");  
@@ -20,7 +21,7 @@ public class DownloadPSCP {
 		PSCPProcess pscp=new PSCPProcess();
 		CkSsh ssh = new CkSsh();
 		CkGlobal ck = new CkGlobal();
-		ck.UnlockBundle("Hien");
+		ck.UnlockBundle("");
 		String hostname;
 		try {
 			hostname = pscp.selectField(id_scp, pscp.controlDB.getTable_name(), "host_name");
@@ -28,6 +29,11 @@ public class DownloadPSCP {
 			boolean success = ssh.Connect(hostname, port);
 		if (success != true) {
 			System.out.println(ssh.lastErrorText());
+		}else{
+				SendMail.sendMail(emailAddress, "CONNECT NOTIFICATION",
+						"Connect fail!!");
+				System.out.println("Connect fail!!");
+			
 			return;
 		}
 		ssh.put_IdleTimeoutMs(5000);
@@ -36,6 +42,7 @@ public class DownloadPSCP {
 		success = ssh.AuthenticatePw(username, pass);
 		if (success != true) {
 			System.out.println(ssh.lastErrorText());
+		
 			return;
 		}
 		CkScp scp = new CkScp();
@@ -43,6 +50,11 @@ public class DownloadPSCP {
 		success = scp.UseSsh(ssh);
 		if (success != true) {
 			System.out.println(scp.lastErrorText());
+		}else{
+			SendMail.sendMail(emailAddress, "LOGIN NOTIFICATION",
+					"Login fail!!");
+			System.out.println("Login fail!!");
+		
 			return;
 		}
 		String file_name_architecture=pscp.selectField(id_scp, pscp.controlDB.getTable_name(), "file_name_architecture");
@@ -52,8 +64,14 @@ public class DownloadPSCP {
 		success = scp.SyncTreeDownload(remotePath, localPath, 2, false);
 		if (success != true) {
 			System.out.println(scp.lastErrorText());
+		}else{
+			SendMail.sendMail(emailAddress, "DOWNLOAD NOTIFICATION",
+					"Download fail!!");
+			System.out.println("Download fail!!");
 			return;
 		}
+		SendMail.sendMail(emailAddress, "DOWNLOAD NOTIFICATION",
+				"Download successfully!");
 		System.out.println("Download successfully!");
     
 		ssh.Disconnect();
