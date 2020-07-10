@@ -3,6 +3,8 @@ import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.LocalDateTime;
+import java.util.Date;
 
 public class ControlDB {
 	private String source_db;
@@ -44,6 +46,28 @@ public class ControlDB {
 
 	}
 	
+		public int selectIDFile (String field, String table, String data_file_name){
+			sql = "SELECT " + field + " FROM " +table + " WHERE file_name=?";
+			System.out.println(sql);
+			try {
+				ptmt = DBConnection.createConnection(this.source_db).prepareStatement(sql);
+				ptmt.setString(1,data_file_name);
+				rs = ptmt.executeQuery();
+				rs.next();
+				return rs.getInt(field);
+			} catch (Exception e) {
+				return -1;
+			} finally {
+				try {
+					if (ptmt != null)
+						ptmt.close();
+					if (rs != null)
+						rs.close();
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+		}
 	public String selectField(String field, String config_name) {
 		sql = "SELECT " + field + " FROM " + this.table_name + " WHERE config_name=?";
 		try {
@@ -109,7 +133,7 @@ public class ControlDB {
 
 		}
 	}
-	public boolean insertLogFileStatus(String pathFile, String table, String file_name,String config_id, String file_status, String timestamp){
+	public boolean insertLogFileStatus( String table, String file_name,String config_id, String file_status, String timestamp){
 		sql = "INSERT INTO " + table
 				+ "(file_name,data_file_config_id,file_status,staging_load_count,file_timestamp) value (?,?,?,?,?)";
 		try {
@@ -140,12 +164,13 @@ public class ControlDB {
 
 	public boolean updateLogAfterLoadingIntoStagingDB(String table, String file_status, String config_id, String timestamp,
 			String stagin_load_count, String file_name) {
-		  sql = "update "+table+ " set file_status=?, staging_load_count=? where file_name='" + file_name + "'";
+		  sql = "update "+table+ " set file_status=?, staging_load_count=?,  load_staging_timestamp=now() where file_name='" + file_name + "'";
 		  System.out.println(sql);
 		try {
 			ptmt = DBConnection.createConnection(this.source_db).prepareStatement(sql);
 			ptmt.setString(1, file_status);
 			ptmt.setInt(2, Integer.parseInt(stagin_load_count));
+//			ptmt.setString(4, timestamp);
 			ptmt.executeUpdate();
 			return true;
 		} catch (SQLException e) {

@@ -21,6 +21,7 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 import notification.SendMail;
 import utils.ControlDB;
+import warehouse.DataWarehouse;
 
 public class Staging {
 	private DownloadPSCP pscp=null;
@@ -28,12 +29,13 @@ public class Staging {
 	private DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
 	private LocalDateTime now = LocalDateTime.now();
 	private String timestamp = dtf.format(now); 
+	private DataWarehouse dw=new DataWarehouse();
 	private String emailAddress="nguyenthanhhien.itnlu@gmail.com";
 	
-	private final String FILE_STATUS_READY="ER";
-	private final String FILE_STATUS_TRANSFORM="TR";
-	private final String FILE_STATUS_ERRO="ERRO";
-	private final String FILE_STATUS_SUCCESS="SUCCESS";
+	private static final String FILE_STATUS_READY="ER";
+	private static final String FILE_STATUS_TRANSFORM="TR";
+	private static  final String FILE_STATUS_ERRO="ERRO";
+	private static final String FILE_STATUS_SUCCESS="SUCCESS";
 	
 	public Staging(){
 		this.configNames=new ArrayList<>();
@@ -136,8 +138,11 @@ public class Staging {
 							System.out.println("TR");
 							file_status = FILE_STATUS_TRANSFORM; 
 							target_dir = dp.getControlDb().selectField("success_dir", this.configNames.get(i));
+							
 							if (moveFile(target_dir, file)){
-								System.out.println(timestamp);
+							int id_file=dp.getControlDb().selectIDFile("data_file_id", "log_file", file.getName());
+							dw.loadToDW(id_file);
+							System.out.println(timestamp);
 							dp.getControlDb().updateLogAfterLoadingIntoStagingDB(table, file_status, config_id, timestamp, stagin_load_count, file.getName());
 							}
 						;
@@ -237,7 +242,7 @@ public class Staging {
 		DataProcess dp=new DataProcess();
 		dp.setControlDb(controlDb);
 	    //staging.loadFileStatus(dp,"log_file");
-        staging.extractToStagingDB(dp);
+       staging.extractToStagingDB(dp);
        //File f=new File("C:/Users/PC/Desktop/LEARNING/Data/File/sinhvien_sang_nhom14.xlsx");
        //System.out.println(dp.readValuesXLSX(f));
        //loadToDW(int id_file);
