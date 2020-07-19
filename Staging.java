@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.StringTokenizer;
 
 import org.apache.commons.compress.archivers.dump.InvalidFormatException;
 import org.apache.poi.ss.usermodel.Row;
@@ -40,7 +41,7 @@ public class Staging {
 	public Staging(){
 		this.configNames=new ArrayList<>();
 		this.pscp=new DownloadPSCP();
-		//this.pscp.downloadFilePSCP();
+		this.pscp.downloadFilePSCP();
 		
 	}
 
@@ -103,6 +104,8 @@ public class Staging {
 		String delim = dp.getControlDb().selectField("delimmeter", this.configNames.get(i));
 		String column_list = dp.getControlDb().selectField("column_list", this.configNames.get(i));
 		
+		StringTokenizer strToken= new StringTokenizer(column_list,",");
+		
 		File imp_dir = new File(import_dir);
 			String extention = "";
 			File[] listFile = imp_dir.listFiles();
@@ -112,10 +115,10 @@ public class Staging {
 					String values = "";
 					System.out.println(file_type);
 					if (file_type.equals(".txt") ) {
-						values = dp.readValuesTXT(file, delim);
+						values = dp.readValuesTXT(file, "|", 11);
 						extention = ".txt";
 					} else if (file_type.equals(".xlsx")) {
-						values = dp.readValuesXLSX(file);
+						values = dp.readValuesXLSX(file, strToken.countTokens());
 						extention = ".xlsx";
 					}
 					
@@ -135,13 +138,13 @@ public class Staging {
 						String target_dir;
 						
 						if (dp.writeDataToStagingDB(column_list, target_table, values)) {
-							System.out.println("TR");
+							System.out.println(file.getName()+"TR");
 							file_status = FILE_STATUS_TRANSFORM; 
 							target_dir = dp.getControlDb().selectField("success_dir", this.configNames.get(i));
 							
 							if (moveFile(target_dir, file)){
 							int id_file=dp.getControlDb().selectIDFile("data_file_id", "log_file", file.getName());
-							dw.loadToDW(id_file);
+							//dw.loadToDW(id_file);
 							System.out.println(timestamp);
 							dp.getControlDb().updateLogAfterLoadingIntoStagingDB(table, file_status, config_id, timestamp, stagin_load_count, file.getName());
 							}
@@ -149,7 +152,7 @@ public class Staging {
 
 						} else {
 							file_status = FILE_STATUS_ERRO;
-							System.out.println("ERRO");
+							System.out.println(file.getName()+ "ERRO");
 							System.out.println(timestamp);
 							target_dir = dp.getControlDb().selectField("error_dir", this.configNames.get(i));
 							if (moveFile(target_dir, file))
@@ -161,10 +164,10 @@ public class Staging {
 					 
 				}
 				else{
-				SendMail.sendMail(emailAddress, "URGENT FILE INFORMATION",
-						"Don't have any file_status is ready to load into staging db!");
-				
-					System.out.println("Don't have any file_status is ready to load into staging db! ");
+//				SendMail.sendMail(emailAddress, "URGENT FILE INFORMATION",
+//						"Don't have any file_status is ready to load into staging db!");
+//				
+//					System.out.println("Don't have any file_status is ready to load into staging db! ");
 				}
 			}
 		}
@@ -235,13 +238,13 @@ public class Staging {
 	public static void main(String[] args) {
 		Staging staging=new Staging();
 		staging.addConfigName("file_xlsx");
-		//dw.addConfigName("file_txt");
+		//staging.addConfigName("file_txt");
 		
 		ControlDB controlDb=new ControlDB("controldb","stagingdb", "configuration");
 		// 
 		DataProcess dp=new DataProcess();
 		dp.setControlDb(controlDb);
-	    //staging.loadFileStatus(dp,"log_file");
+	  //staging.loadFileStatus(dp,"log_file");
        staging.extractToStagingDB(dp);
        //File f=new File("C:/Users/PC/Desktop/LEARNING/Data/File/sinhvien_sang_nhom14.xlsx");
        //System.out.println(dp.readValuesXLSX(f));
