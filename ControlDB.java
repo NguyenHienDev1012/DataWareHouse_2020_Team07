@@ -4,7 +4,13 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Date;
+
+import com.mysql.jdbc.Connection;
+
+import control.Configuration;
+import control.SCP_DownLoad;
 
 public class ControlDB {
 	private String source_db;
@@ -13,6 +19,7 @@ public class ControlDB {
 	private PreparedStatement ptmt=null;
 	private ResultSet rs=null;
 	private String sql="";
+	private Configuration configuration;
 	 
 	
 	public ControlDB(String source_db, String target_db_name, String table_name) {
@@ -68,6 +75,49 @@ public class ControlDB {
 				}
 			}
 		}
+// Lấy tất cả các trường từ cơ sở dữ liệu từ bảng configuration  dựa vào config_name
+	public Configuration selectAllFieldConfiguration(String config_name) throws SQLException{
+		String sql = "SELECT * FROM " + this.table_name + " WHERE config_name=?";
+		ptmt=DBConnection.createConnection(this.source_db).prepareStatement(sql);
+		ptmt.setString(1, config_name);
+		rs=ptmt.executeQuery();
+		while(rs.next()){
+			configuration= new Configuration(rs.getInt("config_id"),
+					rs.getString("config_name"),
+					rs.getString("config_des"),
+					rs.getString("target_table"),
+					rs.getString("file_type"),
+					rs.getString("import_dir"),
+					rs.getString("success_dir"), 
+					rs.getString("error_dir"),
+					rs.getString("column_list"),
+					rs.getString("column_list_format"), 
+					rs.getString("delimmiter"));
+		}
+		return configuration;
+		
+	}
+	
+   // Lấy tất cả config_name từ bảng configuration
+	public ArrayList<String> getAllConfigName() throws SQLException{
+		String sql = "SELECT config_name FROM " + this.table_name;
+		ArrayList<String> listConfigname= new ArrayList<>();
+		ptmt=DBConnection.createConnection(this.source_db).prepareStatement(sql);
+		rs=ptmt.executeQuery();
+		while(rs.next()){
+			listConfigname.add(rs.getString("config_name"));
+		}
+		return listConfigname;
+		
+	}
+	
+	public static void main(String[] args) throws SQLException {
+		ControlDB controlDb=new ControlDB("controldb","stagingdb", "configuration");
+		Configuration c = controlDb.selectAllFieldConfiguration("file_student_xlsx");
+		System.out.println(c.toString());
+		System.out.println(controlDb.getAllConfigName().size());
+	}
+	
 	public String selectField(String field, String config_name) {
 		sql = "SELECT " + field + " FROM " + this.table_name + " WHERE config_name=?";
 		try {
@@ -162,7 +212,7 @@ public class ControlDB {
 		
 	}
 
-	public boolean updateLogAfterLoadingIntoStagingDB(String table, String file_status, String config_id, String timestamp,
+	public boolean updateLogAfterLoadingIntoStagingDB(String table, String file_status, String timestamp,
 			String stagin_load_count, String file_name) {
 		  sql = "update "+table+ " set file_status=?, staging_load_count=?,  load_staging_timestamp=now() where file_name='" + file_name + "'";
 		  System.out.println(sql);
@@ -188,7 +238,28 @@ public class ControlDB {
 
 		}
 	}
-
+	public void truncateTable(String db_name, String table_name) {
+		String sql;
+		Connection connection = null;
+		PreparedStatement pst = null;
+		try {
+			sql = "TRUNCATE " + table_name;
+			connection = (Connection) DBConnection.createConnection(db_name);
+			pst = connection.prepareStatement(sql);
+			pst.executeUpdate();
+		} catch (SQLException e) {
+			e.printStackTrace();
+		} finally {
+			try {
+				if (pst != null)
+					pst.close();
+				if (connection != null)
+					connection.close();
+			} catch (SQLException e) {
+				e.printStackTrace();
+			}
+		}
+	}
 	public boolean createTable(String table_name, String variables, String column_list) {
 		sql = "CREATE TABLE "+table_name+" (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,";
 		String[] vari = variables.split(",");
