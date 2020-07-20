@@ -1,4 +1,4 @@
-package process;
+package etl;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -9,6 +9,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.sql.Date;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -20,7 +21,10 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
-import notification.SendMail;
+import control.Configuration;
+import download.DownloadPSCP;
+import mail.MailConfig;
+import mail.SendMail;
 import utils.ControlDB;
 import warehouse.DataWarehouse;
 
@@ -31,27 +35,21 @@ public class Staging {
 	private LocalDateTime now = LocalDateTime.now();
 	private String timestamp = dtf.format(now); 
 	private DataWarehouse dw=new DataWarehouse();
-	private String emailAddress="nguyenthanhhien.itnlu@gmail.com";
 	
 	private static final String FILE_STATUS_READY="ER";
 	private static final String FILE_STATUS_TRANSFORM="TR";
 	private static  final String FILE_STATUS_ERRO="ERRO";
 	private static final String FILE_STATUS_SUCCESS="SUCCESS";
 	
-	public Staging(){
+	public Staging() throws SQLException{
 		this.configNames=new ArrayList<>();
 		this.pscp=new DownloadPSCP();
-		//this.pscp.downloadFilePSCP();
+		this.pscp.downloadFilePSCP();
 		
 	}
 
 	public void addConfigName(String configName ){
 		this.configNames.add(configName);
-	}
-	public void startExtractToDB(DataProcess dp){
-		for(String configName: this.configNames){
-		//	ExtractToDB(dp, configName);
-		}
 	}
 	
 	public void loadFileStatus(DataProcess dp, String table_name){
@@ -67,12 +65,12 @@ public class Staging {
 						dp.getControlDb().insertLogFileStatus(table_name, f.getName(), config_id, FILE_STATUS_READY,timestamp);
 				}
 				
-				SendMail.sendMail(emailAddress, "URGENT FILE INFORMATION",
+				SendMail.sendMail(MailConfig.EMAIL_RECEIVER, "URGENT FILE INFORMATION",
 						"Load file status successfully!");
 				System.out.println("Load file status successfully!");
 			}
 				else{
-					SendMail.sendMail(emailAddress, "URGENT FILE INFORMATION",
+					SendMail.sendMail(MailConfig.EMAIL_RECEIVER, MailConfig.EMAIL_TITLE,
 							"No any file here to load file status!");
 					System.out.println("No any file here to load file status!");
 				}
@@ -87,23 +85,28 @@ public class Staging {
 		
 	}
 	
-	public boolean extractToStagingDB(DataProcess dp){
-		for (int i = 0; i < this.configNames.size(); i++) {
-		String target_table = dp.getControlDb().selectField("target_table", this.configNames.get(i));
-
-		if (!dp.getControlDb().tableExists(target_table)) {
-			String properties = dp.getControlDb().selectField("properties",this.configNames.get(i));
-			System.out.println(properties);
-			String column_list = dp.getControlDb().selectField("column_list", this.configNames.get(i));
-			dp.getControlDb().createTable(target_table, properties, column_list);
-		}
+	public boolean extractToStagingDB(DataProcess dp) throws SQLException{
+		for (String config_name : this.configNames) {
+			
+		Configuration configuration = dp.getControlDb().selectAllFieldConfiguration(config_name);
+			
+		//int config_id= configuration.getConfig_id();
+		String target_table = configuration.getTarget_table();
+		String file_type = configuration.getFile_type();
+		String import_dir = configuration.getImport_dir();
+		String success_dir= configuration.getSuccess_dir();
+		String error_dir = new Configuration().getError_dir();
+		String delim = configuration.getDelimmiter();
+		String column_list =  configuration.getColumn_list();
+		String column_list_format= configuration.getColumn_list_format();
 		
-		String file_type = dp.getControlDb().selectField("file_type", this.configNames.get(i));
-		String import_dir = dp.getControlDb().selectField("import_dir", this.configNames.get(i));
+		
+//		if (!dp.getControlDb().tableExists(target_table)) {
+//			System.out.println(column_list_format);
+//			dp.getControlDb().createTable(target_table, column_list_format, column_list);
+//		}
+		
 		System.out.println(import_dir);
-		String delim = dp.getControlDb().selectField("delimmeter", this.configNames.get(i));
-		String column_list = dp.getControlDb().selectField("column_list", this.configNames.get(i));
-		
 		StringTokenizer strToken= new StringTokenizer(column_list,",");
 		
 		File imp_dir = new File(import_dir);
@@ -115,7 +118,7 @@ public class Staging {
 					String values = "";
 					System.out.println(file_type);
 					if (file_type.equals(".txt") ) {
-						values = dp.readValuesTXT(file, "|", 11);
+						values = dp.readValuesTXT(file, delim, 11);
 						extention = ".txt";
 					} else if (file_type.equals(".xlsx")) {
 						values = dp.readValuesXLSX(file, strToken.countTokens());
@@ -126,7 +129,6 @@ public class Staging {
 					
 					if (values != null) {
 						String table = "log_file";
-						String config_id = dp.getControlDb().selectField("config_id", this.configNames.get(i));
 						// count line
 						String stagin_load_count = "";
 						try {
@@ -135,18 +137,16 @@ public class Staging {
 								| org.apache.poi.openxml4j.exceptions.InvalidFormatException e) {
 							e.printStackTrace();
 						}
-						String target_dir;
 						
 						if (dp.writeDataToStagingDB(column_list, target_table, values)) {
 							System.out.println(file.getName()+"TR");
 							file_status = FILE_STATUS_TRANSFORM; 
-							target_dir = dp.getControlDb().selectField("success_dir", this.configNames.get(i));
 							
-							if (moveFile(target_dir, file)){
+							if (moveFile(success_dir, file)){
 							int id_file=dp.getControlDb().selectIDFile("data_file_id", "log_file", file.getName());
 							//dw.loadToDW(id_file);
 							System.out.println(timestamp);
-							dp.getControlDb().updateLogAfterLoadingIntoStagingDB(table, file_status, config_id, timestamp, stagin_load_count, file.getName());
+							dp.getControlDb().updateLogAfterLoadingIntoStagingDB(table, file_status,  timestamp, stagin_load_count, file.getName());
 							}
 						;
 
@@ -154,20 +154,13 @@ public class Staging {
 							file_status = FILE_STATUS_ERRO;
 							System.out.println(file.getName()+ "ERRO");
 							System.out.println(timestamp);
-							target_dir = dp.getControlDb().selectField("error_dir", this.configNames.get(i));
-							if (moveFile(target_dir, file))
-						    dp.getControlDb().updateLogAfterLoadingIntoStagingDB(table, file_status, config_id, timestamp, stagin_load_count, file.getName());
+							if (moveFile(error_dir, file))
+						    dp.getControlDb().updateLogAfterLoadingIntoStagingDB(table, file_status, timestamp, stagin_load_count, file.getName());
 								;
 
 						}
 					}
 					 
-				}
-				else{
-//				SendMail.sendMail(emailAddress, "URGENT FILE INFORMATION",
-//						"Don't have any file_status is ready to load into staging db!");
-//				
-//					System.out.println("Don't have any file_status is ready to load into staging db! ");
 				}
 			}
 		}
@@ -235,19 +228,18 @@ public class Staging {
 		return result;
 	}
 	
-	public static void main(String[] args) {
+	public static void main(String[] args) throws SQLException {
 		Staging staging=new Staging();
-		staging.addConfigName("file_xlsx");
+		//staging.addConfigName("file_student_xlsx");
 		//staging.addConfigName("file_txt");
-		
+		staging.addConfigName("file_monhoc_xlsx");
 		ControlDB controlDb=new ControlDB("controldb","stagingdb", "configuration");
 		// 
 		DataProcess dp=new DataProcess();
 		dp.setControlDb(controlDb);
-	  // staging.loadFileStatus(dp,"log_file");
-       staging.extractToStagingDB(dp);
-       //File f=new File("C:/Users/PC/Desktop/LEARNING/Data/File/sinhvien_sang_nhom14.xlsx");
-       //System.out.println(dp.readValuesXLSX(f));
+		System.out.println(staging.configNames.size());
+	 // staging.loadFileStatus(dp,"log_file");
+      staging.extractToStagingDB(dp);
        //loadToDW(int id_file);
 	}
 }
