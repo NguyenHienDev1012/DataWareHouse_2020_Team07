@@ -25,12 +25,10 @@ public class DataProcess {
 	static final String NUMBER_REGEX = "^[0-9]+$";
 	private ControlDB controlDb;
 	static final String DATE_FORMAT = "yyyy-MM-dd";
+	private static final String ACTIVED_DATE="31-12-2013";
 	private String readLines(String value, String delim) {
 		String values = "";
 		StringTokenizer stoken = new StringTokenizer(value, delim);
-		if (stoken.countTokens() > 0) {
-			stoken.nextToken();
-		}
 		int countToken = stoken.countTokens();
 		String lines = "(";
 		for (int j = 0; j < countToken; j++) {
@@ -83,9 +81,11 @@ public class DataProcess {
 			while (rows.hasNext()) {
 				Row row = rows.next();
 				
-				Iterator<Cell> cells = row.cellIterator();
-				while (cells.hasNext()) {
-					Cell cell = cells.next();
+				for (int i = 0; i <field_quantity; i++) {
+					  if(i==field_quantity-1){
+							value +=DataProcess.ACTIVED_DATE;
+						}
+					Cell cell= row.getCell(i, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK);
 					CellType cellType = cell.getCellType();
 					switch (cellType) {
 					case NUMERIC:
@@ -112,7 +112,6 @@ public class DataProcess {
 							break;
 						}
 						break;
-					case BLANK:
 					default:
 						value += " " + delim;
 						break;
@@ -121,6 +120,7 @@ public class DataProcess {
 				values += readLines(value, delim);
 				value = "";
 			}
+			
 			workBook.close();
 			fileIn.close();
 			return values.substring(0, values.length() - 1);
