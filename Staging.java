@@ -41,7 +41,7 @@ public class Staging {
 	public Staging(){
 		this.configNames=new ArrayList<>();
 		this.pscp=new DownloadPSCP();
-		this.pscp.downloadFilePSCP();
+		//this.pscp.downloadFilePSCP();
 		
 	}
 
@@ -244,7 +244,7 @@ public class Staging {
 		// 
 		DataProcess dp=new DataProcess();
 		dp.setControlDb(controlDb);
-	  //staging.loadFileStatus(dp,"log_file");
+	  // staging.loadFileStatus(dp,"log_file");
        staging.extractToStagingDB(dp);
        //File f=new File("C:/Users/PC/Desktop/LEARNING/Data/File/sinhvien_sang_nhom14.xlsx");
        //System.out.println(dp.readValuesXLSX(f));
