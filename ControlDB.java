@@ -10,6 +10,7 @@ import java.util.Date;
 import com.mysql.jdbc.Connection;
 
 import control.Configuration;
+import control.Log_file;
 import control.SCP_DownLoad;
 
 public class ControlDB {
@@ -97,6 +98,27 @@ public class ControlDB {
 		return configuration;
 		
 	}
+	// Lấy tất cả các trường từ cơ sở dữ liệu từ bảng log_file  dựa vào file_name
+		public Log_file selectAllFieldLogFile(String file_name, String table_name) throws SQLException{
+			String sql = "SELECT * FROM " + table_name + " WHERE file_name=?";
+			System.out.println(sql);
+			ptmt=DBConnection.createConnection(this.source_db).prepareStatement(sql);
+			ptmt.setString(1, file_name);
+			rs=ptmt.executeQuery();
+			while(rs.next()){
+				Log_file log_file= new Log_file(rs.getInt("data_file_id"), 
+						rs.getString("file_name"), rs.getInt("data_file_config_id"), 
+						rs.getString("file_status"), 
+						rs.getInt("staging_load_count"),
+						rs.getDate("file_timestamp"), 
+						rs.getDate("load_staging_timestamp"), 
+						null);
+				 
+				return log_file;
+			}
+			return null;
+			
+		}
 	
    // Lấy tất cả config_name từ bảng configuration
 	public ArrayList<String> getAllConfigName() throws SQLException{
@@ -115,7 +137,9 @@ public class ControlDB {
 		ControlDB controlDb=new ControlDB("controldb","stagingdb", "configuration");
 		Configuration c = controlDb.selectAllFieldConfiguration("file_student_xlsx");
 		System.out.println(c.toString());
-		System.out.println(controlDb.getAllConfigName().size());
+		System.out.println(controlDb.selectAllFieldLogFile("monhoc2013.xlsx", "log_file"));
+	
+	//	System.out.println(controlDb.getAllConfigName().size());
 	}
 	
 	public String selectField(String field, String config_name) {
