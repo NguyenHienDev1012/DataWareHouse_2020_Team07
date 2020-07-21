@@ -98,6 +98,28 @@ public class ControlDB {
 		return configuration;
 		
 	}
+	//// Lấy tất cả các trường từ cơ sở dữ liệu từ bảng configuration  dựa vào config_name
+	public Configuration selectAllFieldConfigurationByConfigId(int config_id) throws SQLException{
+		String sql = "SELECT * FROM " + this.table_name + " WHERE config_id=?";
+		ptmt=DBConnection.createConnection(this.source_db).prepareStatement(sql);
+		ptmt.setInt(1, config_id);
+		rs=ptmt.executeQuery();
+		while(rs.next()){
+			configuration= new Configuration(rs.getInt("config_id"),
+					rs.getString("config_name"),
+					rs.getString("config_des"),
+					rs.getString("target_table"),
+					rs.getString("file_type"),
+					rs.getString("import_dir"),
+					rs.getString("success_dir"), 
+					rs.getString("error_dir"),
+					rs.getString("column_list"),
+					rs.getString("column_list_format"), 
+					rs.getString("delimmiter"));
+		}
+		return configuration;
+		
+	}
 	// Lấy tất cả các trường từ cơ sở dữ liệu từ bảng log_file  dựa vào file_name
 		public Log_file selectAllFieldLogFile(String file_name, String table_name) throws SQLException{
 			String sql = "SELECT * FROM " + table_name + " WHERE file_name=?";
@@ -119,6 +141,21 @@ public class ControlDB {
 			return null;
 			
 		}
+		
+		// Lấy tất cả các file_name trong cơ sở dữ liệu từ bảng log_file hien co
+		public ArrayList<String> selectAllFileNameInLogFile(String table_name) throws SQLException{
+					String sql = "SELECT * FROM " + table_name;
+					System.out.println(sql);
+					ptmt=DBConnection.createConnection(this.source_db).prepareStatement(sql);
+					rs=ptmt.executeQuery();
+					ArrayList<String> listFile_name= new ArrayList<>();
+					while(rs.next()){
+						
+						 listFile_name.add(rs.getString("file_name"));
+					}
+					return listFile_name;
+					
+				}
 	
    // Lấy tất cả config_name từ bảng configuration
 	public ArrayList<String> getAllConfigName() throws SQLException{
@@ -136,9 +173,8 @@ public class ControlDB {
 	public static void main(String[] args) throws SQLException {
 		ControlDB controlDb=new ControlDB("controldb","stagingdb", "configuration");
 		Configuration c = controlDb.selectAllFieldConfiguration("file_student_xlsx");
-		System.out.println(c.toString());
-		System.out.println(controlDb.selectAllFieldLogFile("monhoc2013.xlsx", "log_file"));
-	
+		//System.out.println(controlDb.selectAllFieldLogFile("monhoc2013.xlsx", "log_file"));
+	    System.out.println(controlDb.selectAllFileNameInLogFile("log_file"));
 	//	System.out.println(controlDb.getAllConfigName().size());
 	}
 	
@@ -207,13 +243,13 @@ public class ControlDB {
 
 		}
 	}
-	public boolean insertLogFileStatus( String table, String file_name,String config_id, String file_status, String timestamp){
+	public boolean insertLogFileStatus( String table, String file_name,int config_id, String file_status, String timestamp){
 		sql = "INSERT INTO " + table
 				+ "(file_name,data_file_config_id,file_status,staging_load_count,file_timestamp) value (?,?,?,?,?)";
 		try {
 			ptmt = DBConnection.createConnection(this.source_db).prepareStatement(sql);
 			ptmt.setString(1, file_name);
-			ptmt.setInt(2, Integer.parseInt(config_id));
+			ptmt.setInt(2, config_id);
 			ptmt.setString(3, file_status);
 			ptmt.setInt(4, Integer.parseInt("0"));
 			ptmt.setString(5, timestamp);
