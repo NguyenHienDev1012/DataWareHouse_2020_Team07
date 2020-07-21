@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.Scanner;
 import java.util.StringTokenizer;
 
 import org.apache.commons.compress.archivers.dump.InvalidFormatException;
@@ -23,7 +24,9 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 import control.Configuration;
 import control.Log_file;
+import control.SCP_DownLoad;
 import download.DownloadPSCP;
+import download.PSCPProcess;
 import mail.MailConfig;
 import mail.SendMail;
 import utils.ControlDB;
@@ -31,11 +34,13 @@ import warehouse.DataWarehouse;
 
 public class Staging {
 	private DownloadPSCP pscp=null;
-	private ArrayList<String> configNames=null;
 	private DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
 	private LocalDateTime now = LocalDateTime.now();
 	private String timestamp = dtf.format(now); 
 	private DataWarehouse dw=new DataWarehouse();
+	private Scanner sc = new Scanner(System.in);
+	private ControlDB controlDb=new ControlDB("controldb","stagingdb", "configuration");
+	private DataProcess dp=new DataProcess();
 	
 	private static final String FILE_STATUS_READY="ER";
 	private static final String FILE_STATUS_TRANSFORM="TR";
@@ -43,27 +48,33 @@ public class Staging {
 	private static final String FILE_STATUS_SUCCESS="SUCCESS";
 	
 	public Staging() throws SQLException{
-		this.configNames=new ArrayList<>();
+		dp.setControlDb(controlDb);
 		this.pscp=new DownloadPSCP();
 		
 	}
 
-	public void addConfigName(String configName ){
-		this.configNames.add(configName);
-	}
 	
-	public void loadFileStatus(DataProcess dp, String table_name) throws SQLException{
-		 //this.pscp.downloadFilePSCP();
-		for (int i = 0; i < this.configNames.size(); i++) {
-			String import_dir = dp.getControlDb().selectField("import_dir", this.configNames.get(i));
-			String config_id = dp.getControlDb().selectField("config_id", this.configNames.get(i));
-		
+	public void loadFileStatus(DataProcess dp, String table_name, int id_config) throws SQLException{
+		    
+			Configuration configuration=dp.getControlDb().selectAllFieldConfigurationByConfigId((id_config));
+			String import_dir = configuration.getImport_dir();
+			int config_id = configuration.getConfig_id();
+			
+			ArrayList<String> listFileNameCurrent=dp.getControlDb().selectAllFileNameInLogFile("log_file");
+
 			File imp_dir = new File(import_dir);
 			if (imp_dir.exists()) {
 				File[] listFile = imp_dir.listFiles();
 				if(listFile.length>0){
 				for(File f: listFile){
+					if(listFileNameCurrent.size()>0){
+						if(!listFileNameCurrent.contains(f.getName())){
+							dp.getControlDb().insertLogFileStatus(table_name, f.getName(), config_id, FILE_STATUS_READY,timestamp);
+					}
+				}
+					else{
 						dp.getControlDb().insertLogFileStatus(table_name, f.getName(), config_id, FILE_STATUS_READY,timestamp);
+					}
 				}
 				
 				SendMail.sendMail(MailConfig.EMAIL_RECEIVER, "URGENT FILE INFORMATION",
@@ -84,12 +95,10 @@ public class Staging {
 			
 		}
 		
-	}
 	
-	public boolean extractToStagingDB(DataProcess dp) throws SQLException{
-		for (String config_name : this.configNames) {
+	public boolean extractToStagingDB(DataProcess dp, int id_config) throws SQLException{
 			
-		Configuration configuration = dp.getControlDb().selectAllFieldConfiguration(config_name);
+		Configuration configuration = dp.getControlDb().selectAllFieldConfigurationByConfigId(id_config);
 		System.out.println(configuration.toString());
 			
 		String target_table = configuration.getTarget_table();
@@ -168,7 +177,6 @@ public class Staging {
 					 
 				}
 			}
-		}
 		return false;
 	}
 	
@@ -233,19 +241,78 @@ public class Staging {
 		return result;
 	}
 	
+	public void id_SCP_download(int id_scp) throws SQLException{
+		pscp.downloadFilePSCP(id_scp);
+		PSCPProcess pscp=new PSCPProcess();
+		SCP_DownLoad scp_download=  pscp.selectAllField(id_scp, "scp_download");
+		loadFileStatus(dp, "log_file", scp_download.getConfig_id());
+	}
+	public void userInputToDownload() throws NumberFormatException, SQLException{
+		while(true){
+			
+			String user="Nhap ma scp muon download.\n"
+					+ "1. student \n"
+					+ "2. monhoc\n"
+					+ "3. lophoc\n"
+					+ "4. dangky\n"
+					+ "5. load to staging";
+			System.out.println(user);
+			int id_scp= Integer.parseInt(sc.nextLine());
+			switch (id_scp) {
+			case 1:
+				System.out.println("Ban da chon tai id_scp:\t" +id_scp);
+			    id_SCP_download(id_scp);
+				break;
+			case 2:
+				System.out.println("Ban da chon tai id_scp:\t" +id_scp);
+			    id_SCP_download(id_scp);
+				break;
+			case 3:
+				System.out.println("Ban da chon tai id_scp:\t" +id_scp);
+			    id_SCP_download(id_scp);
+				break;
+			case 4:
+				System.out.println("Ban da chon tai id_scp:\t" +id_scp);
+			    id_SCP_download(id_scp);
+				break;
+            case 5:
+            	userInputToExtractStaging();
+				
+				break;
+
+			default:
+				break;
+			}
+			
+		}
+	}
+	public void userInputToExtractStaging() throws NumberFormatException, SQLException{
+		while(true){
+			String user="Nhap ma can extract vao staging.\n"
+					+ "1. student \n"
+					+ "3. monhoc\n"
+					+ "4. lophoc\n"
+					+ "5. dangky\n"
+					+ "d. download";
+			System.out.println(user);
+			int id_config= 0;
+			try {
+				id_config= Integer.parseInt(sc.nextLine());
+			} catch (Exception e) {
+				userInputToDownload();
+			}
+			extractToStagingDB(dp, id_config );
+			
+		}
+	}
+	
 	public static void main(String[] args) throws SQLException {
 		Staging staging=new Staging();
-		//staging.addConfigName("file_student_xlsx");
-		//staging.addConfigName("file_txt");
-		staging.addConfigName("file_monhoc_xlsx");
-		ControlDB controlDb=new ControlDB("controldb","stagingdb", "configuration");
-		// 
-		DataProcess dp=new DataProcess();
-		dp.setControlDb(controlDb);
-	//	System.out.println(staging.configNames.size());
-	  staging.loadFileStatus(dp,"log_file");
-     // staging.extractToStagingDB(dp);
+		staging.userInputToDownload();
        //loadToDW(int id_file);
 	}
 }
-//sinhvien.chieu.nhom2 kieu format date
+
+//sinhvien.chieu.nhom2.xlsx
+//sinhvien_sang.nhom9.xlsx
+//sinhvien_sang.nhom11.xlsx
