@@ -22,6 +22,7 @@ import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 import control.Configuration;
+import control.Log_file;
 import download.DownloadPSCP;
 import mail.MailConfig;
 import mail.SendMail;
@@ -44,7 +45,6 @@ public class Staging {
 	public Staging() throws SQLException{
 		this.configNames=new ArrayList<>();
 		this.pscp=new DownloadPSCP();
-		this.pscp.downloadFilePSCP();
 		
 	}
 
@@ -52,7 +52,8 @@ public class Staging {
 		this.configNames.add(configName);
 	}
 	
-	public void loadFileStatus(DataProcess dp, String table_name){
+	public void loadFileStatus(DataProcess dp, String table_name) throws SQLException{
+		 //this.pscp.downloadFilePSCP();
 		for (int i = 0; i < this.configNames.size(); i++) {
 			String import_dir = dp.getControlDb().selectField("import_dir", this.configNames.get(i));
 			String config_id = dp.getControlDb().selectField("config_id", this.configNames.get(i));
@@ -89,36 +90,40 @@ public class Staging {
 		for (String config_name : this.configNames) {
 			
 		Configuration configuration = dp.getControlDb().selectAllFieldConfiguration(config_name);
+		System.out.println(configuration.toString());
 			
-		//int config_id= configuration.getConfig_id();
 		String target_table = configuration.getTarget_table();
 		String file_type = configuration.getFile_type();
 		String import_dir = configuration.getImport_dir();
 		String success_dir= configuration.getSuccess_dir();
-		String error_dir = new Configuration().getError_dir();
+		String error_dir = configuration.getError_dir();
 		String delim = configuration.getDelimmiter();
 		String column_list =  configuration.getColumn_list();
 		String column_list_format= configuration.getColumn_list_format();
-		
 		
 //		if (!dp.getControlDb().tableExists(target_table)) {
 //			System.out.println(column_list_format);
 //			dp.getControlDb().createTable(target_table, column_list_format, column_list);
 //		}
 		
-		System.out.println(import_dir);
+		//System.out.println(import_dir);
 		StringTokenizer strToken= new StringTokenizer(column_list,",");
 		
 		File imp_dir = new File(import_dir);
 			String extention = "";
 			File[] listFile = imp_dir.listFiles();
 			for (File file : listFile) {
-				String file_status=dp.getControlDb().selectFileStatus("file_status", "log_file",file.getName());
-				if (file.getName().indexOf(file_type) != -1 && file_status.equals(FILE_STATUS_READY)) {
+				
+				Log_file log_file= dp.getControlDb().selectAllFieldLogFile(file.getName(), "log_file");
+				
+				String file_status=log_file.getFile_status();
+				int config_id= configuration.getConfig_id();
+				
+				if (log_file.getData_file_config_id()==config_id&& file_status.equals(FILE_STATUS_READY)) {
 					String values = "";
 					System.out.println(file_type);
 					if (file_type.equals(".txt") ) {
-						values = dp.readValuesTXT(file, delim, 11);
+						values = dp.readValuesTXT(file, delim, strToken.countTokens() );
 						extention = ".txt";
 					} else if (file_type.equals(".xlsx")) {
 						values = dp.readValuesXLSX(file, strToken.countTokens());
@@ -237,9 +242,9 @@ public class Staging {
 		// 
 		DataProcess dp=new DataProcess();
 		dp.setControlDb(controlDb);
-		System.out.println(staging.configNames.size());
-	 // staging.loadFileStatus(dp,"log_file");
-      staging.extractToStagingDB(dp);
+	//	System.out.println(staging.configNames.size());
+	  staging.loadFileStatus(dp,"log_file");
+     // staging.extractToStagingDB(dp);
        //loadToDW(int id_file);
 	}
 }
