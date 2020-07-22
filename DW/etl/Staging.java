@@ -16,7 +16,6 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.Scanner;
 import java.util.StringTokenizer;
-import java.util.zip.ZipException;
 
 import org.apache.commons.compress.archivers.dump.InvalidFormatException;
 import org.apache.poi.ss.usermodel.Row;
@@ -35,6 +34,9 @@ import warehouse.DataWarehouse;
 
 public class Staging {
 	private DownloadPSCP pscp=null;
+	private DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
+	private LocalDateTime now = LocalDateTime.now();
+	private String timestamp = dtf.format(now); 
 	private DataWarehouse dw=new DataWarehouse();
 	private Scanner sc = new Scanner(System.in);
 	private ControlDB controlDb=new ControlDB("controldb","stagingdb", "configuration");
@@ -53,8 +55,7 @@ public class Staging {
 
 	
 	public void loadFileStatus(DataProcess dp, String table_name, int id_config) throws SQLException{
-		String timestamp= getCurrentTime();
-		 
+		    
 			Configuration configuration=dp.getControlDb().selectAllFieldConfigurationByConfigId((id_config));
 			String import_dir = configuration.getImport_dir();
 			int config_id = configuration.getConfig_id();
@@ -101,6 +102,7 @@ public class Staging {
 		System.out.println(configuration.toString());
 			
 		String target_table = configuration.getTarget_table();
+		String file_type = configuration.getFile_type();
 		String import_dir = configuration.getImport_dir();
 		String success_dir= configuration.getSuccess_dir();
 		String error_dir = configuration.getError_dir();
@@ -128,17 +130,16 @@ public class Staging {
 				
 				if (log_file.getData_file_config_id()==config_id&& file_status.equals(FILE_STATUS_READY)) {
 					String values = "";
-					if (file.getName().indexOf(".txt")!=-1 ) {
+					System.out.println(file_type);
+					if (file_type.equals(".txt") ) {
 						values = dp.readValuesTXT(file, delim, strToken.countTokens() );
 						extention = ".txt";
-					} else if (file.getName().indexOf(".xlsx")!=-1) {
-						try {
-							values = dp.readValuesXLSX(file, strToken.countTokens());
-						} catch (java.util.zip.ZipException e) {
-							System.out.println(e.getMessage());
-						}
+					} else if (file_type.equals(".xlsx")) {
+						values = dp.readValuesXLSX(file, strToken.countTokens());
 						extention = ".xlsx";
 					}
+					
+					 
 					
 					if (values != null) {
 						String table = "log_file";
@@ -150,8 +151,7 @@ public class Staging {
 								| org.apache.poi.openxml4j.exceptions.InvalidFormatException e) {
 							e.printStackTrace();
 						}
-						String timestamp= getCurrentTime();
-						 
+						
 						if (dp.writeDataToStagingDB(column_list, target_table, values)) {
 							System.out.println(file.getName()+"TR");
 							file_status = FILE_STATUS_TRANSFORM; 
@@ -179,11 +179,7 @@ public class Staging {
 			}
 		return false;
 	}
-	public String getCurrentTime() {
-		DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
-		LocalDateTime now = LocalDateTime.now();
-		return dtf.format(now);
-	}
+	
 	private boolean moveFile(String target_dir, File file) {
 		try {
 			BufferedInputStream bReader = new BufferedInputStream(new FileInputStream(file));
@@ -294,9 +290,9 @@ public class Staging {
 		while(true){
 			String user="Nhap ma can extract vao staging.\n"
 					+ "1. student \n"
-					+ "2. monhoc\n"
-					+ "3. lophoc\n"
-					+ "4. dangky\n"
+					+ "3. monhoc\n"
+					+ "4. lophoc\n"
+					+ "5. dangky\n"
 					+ "d. download";
 			System.out.println(user);
 			int id_config= 0;
