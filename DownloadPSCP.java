@@ -1,85 +1,79 @@
-package process;
+package download;
 
 import java.sql.SQLException;
 
 import com.chilkatsoft.CkGlobal;
 import com.chilkatsoft.CkScp;
 import com.chilkatsoft.CkSsh;
-import notification.SendMail;
+
+import control.SCP_DownLoad;
+import mail.MailConfig;
+import mail.SendMail;
+
 public class DownloadPSCP {
-	private String emailAddress="nguyenthanhhien.itnlu@gmail.com";
+	private PSCPProcess pscpProcess = new PSCPProcess();
+	private String table_scp_download = "scp_download";
+
 	static {
 		try {
-			System.loadLibrary("chilkat");  
+			System.loadLibrary("chilkat");
 		} catch (UnsatisfiedLinkError e) {
+			SendMail.sendMail(MailConfig.EMAIL_RECEIVER, MailConfig.EMAIL_TITLE, "Native code library failed to load.\n"+e);
 			System.err.println("Native code library failed to load.\n" + e);
 			System.exit(1);
 		}
 	}
-	public void downloadFilePSCP(){
-		int id_scp=1;
-		PSCPProcess pscp=new PSCPProcess();
+
+	public void downloadFilePSCP(int id_scp) throws SQLException {
+		SCP_DownLoad scp_downlowd = pscpProcess.selectAllField(id_scp, table_scp_download);
+		System.out.println(scp_downlowd.toString());
 		CkSsh ssh = new CkSsh();
 		CkGlobal ck = new CkGlobal();
-		ck.UnlockBundle("");
+		ck.UnlockBundle("H");
 		String hostname;
-		try {
-			hostname = pscp.selectField(id_scp, pscp.controlDB.getTable_name(), "host_name");
-			int port = pscp.selectPortField(id_scp, pscp.controlDB.getTable_name(), "port_connect"); 
-			boolean success = ssh.Connect(hostname, port);
+		hostname = scp_downlowd.getHostname();
+		int port = scp_downlowd.getPortconnect();
+		boolean success = ssh.Connect(hostname, port);
 		if (success != true) {
+			SendMail.sendMail(MailConfig.EMAIL_RECEIVER, MailConfig.EMAIL_TITLE, ssh.lastErrorText());
 			System.out.println(ssh.lastErrorText());
-		}else{
-				SendMail.sendMail(emailAddress, "CONNECT NOTIFICATION",
-						"Connect fail!!");
-				System.out.println("Connect fail!!");
-			
 			return;
 		}
 		ssh.put_IdleTimeoutMs(5000);
-		String username=pscp.selectField(id_scp, pscp.controlDB.getTable_name(), "username");
-		String pass=pscp.selectField(id_scp, pscp.controlDB.getTable_name(), "pass");
+		String username = scp_downlowd.getUsername();
+		String pass = scp_downlowd.getPassword();
 		success = ssh.AuthenticatePw(username, pass);
 		if (success != true) {
+			SendMail.sendMail(MailConfig.EMAIL_RECEIVER, MailConfig.EMAIL_TITLE, ssh.lastErrorText());
 			System.out.println(ssh.lastErrorText());
-		
 			return;
 		}
 		CkScp scp = new CkScp();
 
 		success = scp.UseSsh(ssh);
 		if (success != true) {
+			SendMail.sendMail(MailConfig.EMAIL_RECEIVER, MailConfig.EMAIL_TITLE, ssh.lastErrorText());
 			System.out.println(scp.lastErrorText());
-		}else{
-			SendMail.sendMail(emailAddress, "LOGIN NOTIFICATION",
-					"Login fail!!");
-			System.out.println("Login fail!!");
-		
 			return;
 		}
-		String file_name_architecture=pscp.selectField(id_scp, pscp.controlDB.getTable_name(), "file_name_architecture");
-		 scp.put_SyncMustMatch(file_name_architecture);
-		String remotePath = pscp.selectField(id_scp, pscp.controlDB.getTable_name(), "remotePath");
-		String localPath = pscp.selectField(id_scp, pscp.controlDB.getTable_name(), "localPath");
+		String file_name_architecture = scp_downlowd.getFile_name_architecture();
+		scp.put_SyncMustMatch(file_name_architecture);
+		String remotePath = scp_downlowd.getRemotePath();
+		String localPath = scp_downlowd.getLocalPath();
 		success = scp.SyncTreeDownload(remotePath, localPath, 2, false);
+		
 		if (success != true) {
+			SendMail.sendMail(MailConfig.EMAIL_RECEIVER, MailConfig.EMAIL_TITLE, ssh.lastErrorText());
 			System.out.println(scp.lastErrorText());
-		}else{
-			SendMail.sendMail(emailAddress, "DOWNLOAD NOTIFICATION",
-					"Download fail!!");
-			System.out.println("Download fail!!");
 			return;
 		}
-		SendMail.sendMail(emailAddress, "DOWNLOAD NOTIFICATION",
-				"Download successfully!");
+		SendMail.sendMail(MailConfig.EMAIL_RECEIVER, MailConfig.EMAIL_TITLE, "Download successfully!");
 		System.out.println("Download successfully!");
-    
-		ssh.Disconnect();
-		} catch (SQLException e) {
-			e.printStackTrace();
-		} 
-	}
-	
-	////pscp -r -P 2227 guest_access@drive.ecepvn.org:/volume1/ECEP/song.nguyen/DW_2020/data/ D:\\DataWareHouse\\AllFile
-}
 
+		ssh.Disconnect();
+	}
+
+	//// pscp -r -P 2227
+	//// guest_access@drive.ecepvn.org:/volume1/ECEP/song.nguyen/DW_2020/data/
+	//// D:\\DataWareHouse\\AllFile
+}
