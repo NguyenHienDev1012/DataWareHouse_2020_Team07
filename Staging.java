@@ -134,11 +134,21 @@ public class Staging {
 					} else if (file.getName().indexOf(".xlsx")!=-1) {
 						try {
 							values = dp.readValuesXLSX(file, strToken.countTokens());
-						} catch (java.util.zip.ZipException e) {
+						} catch (org.apache.poi.openxml4j.exceptions.NotOfficeXmlFileException e) {
 							System.out.println(e.getMessage());
 						}
 						extention = ".xlsx";
 					}
+					else if(file.getName().indexOf(".csv")!=-1){
+						try {
+							values = dp.readValuesXLSX(file, strToken.countTokens());
+						} catch (org.apache.poi.openxml4j.exceptions.NotOfficeXmlFileException e) {
+							System.out.println(e.getMessage());
+						}
+						extention = ".csv";
+					}
+						
+				
 					
 					if (values != null) {
 						String table = "log_file";
