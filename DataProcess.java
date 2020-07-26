@@ -6,10 +6,14 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.StringTokenizer;
 import java.util.regex.Pattern;
+import java.util.zip.ZipException;
+
+import javax.security.auth.Subject;
 
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
@@ -29,9 +33,6 @@ public class DataProcess {
 	private String readLines(String value, String delim) {
 		String values = "";
 		StringTokenizer stoken = new StringTokenizer(value, delim);
-//		if (stoken.countTokens() > 0) {	
-//			stoken.nextToken();	
-//		}
 		int countToken = stoken.countTokens();
 		String lines = "(";
 		for (int j = 0; j < countToken; j++) {
@@ -68,7 +69,7 @@ public class DataProcess {
 		}
 	}
 
-	public String readValuesXLSX(File s_file, int field_quantity) {
+	public String readValuesXLSX(File s_file, int field_quantity)   {
 		String values = "";
 		String value = "";
 		String delim = "|";
@@ -85,9 +86,6 @@ public class DataProcess {
 				Row row = rows.next();
 				
 				for (int i = 0; i <field_quantity; i++) {
-					  if(i==field_quantity-1){
-							value +=DataProcess.ACTIVED_DATE;
-						}
 					Cell cell= row.getCell(i, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK);
 					CellType cellType = cell.getCellType();
 					switch (cellType) {
