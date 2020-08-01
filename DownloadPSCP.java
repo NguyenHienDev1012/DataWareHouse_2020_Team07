@@ -25,14 +25,14 @@ public class DownloadPSCP {
 	}
 
 	public void downloadFilePSCP(int id_scp) throws SQLException {
-		SCP_DownLoad scp_downlowd = pscpProcess.selectAllField(id_scp, table_scp_download);
-		System.out.println(scp_downlowd.toString());
+		SCP_DownLoad scp_download = pscpProcess.selectAllField(id_scp, table_scp_download);
+		System.out.println(scp_download.toString());
 		CkSsh ssh = new CkSsh();
 		CkGlobal ck = new CkGlobal();
 		ck.UnlockBundle("H");
 		String hostname;
-		hostname = scp_downlowd.getHostname();
-		int port = scp_downlowd.getPortconnect();
+		hostname = scp_download.getHostname();
+		int port = scp_download.getPortconnect();
 		boolean success = ssh.Connect(hostname, port);
 		if (success != true) {
 			SendMail.sendMail(MailConfig.EMAIL_RECEIVER, MailConfig.EMAIL_TITLE, ssh.lastErrorText());
@@ -40,8 +40,8 @@ public class DownloadPSCP {
 			return;
 		}
 		ssh.put_IdleTimeoutMs(5000);
-		String username = scp_downlowd.getUsername();
-		String pass = scp_downlowd.getPassword();
+		String username = scp_download.getUsername();
+		String pass = scp_download.getPassword();
 		success = ssh.AuthenticatePw(username, pass);
 		if (success != true) {
 			SendMail.sendMail(MailConfig.EMAIL_RECEIVER, MailConfig.EMAIL_TITLE, ssh.lastErrorText());
@@ -56,10 +56,10 @@ public class DownloadPSCP {
 			System.out.println(scp.lastErrorText());
 			return;
 		}
-		String file_name_architecture = scp_downlowd.getFile_name_architecture();
+		String file_name_architecture = scp_download.getFile_name_architecture();
 		scp.put_SyncMustMatch(file_name_architecture);
-		String remotePath = scp_downlowd.getRemotePath();
-		String localPath = scp_downlowd.getLocalPath();
+		String remotePath = scp_download.getRemotePath();
+		String localPath = scp_download.getLocalPath();
 		success = scp.SyncTreeDownload(remotePath, localPath, 2, false);
 		
 		if (success != true) {
