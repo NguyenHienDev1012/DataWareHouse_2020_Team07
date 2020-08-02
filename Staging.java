@@ -8,8 +8,10 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.sql.Connection;
 import java.sql.Date;
 import java.sql.SQLException;
+import java.text.ParseException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -28,37 +30,53 @@ import control.Log_file;
 import control.SCP_DownLoad;
 import download.DownloadPSCP;
 import download.PSCPProcess;
+import dw.DataWarehouse;
 import mail.MailConfig;
 import mail.SendMail;
 import utils.ControlDB;
-import warehouse.DataWarehouse;
+import utils.DBConnection;
 
 public class Staging {
 	private DownloadPSCP pscp=null;
-	private DataWarehouse dw=new DataWarehouse();
+	Connection cS = DBConnection.createConnection("stagingdb");
+	Connection cC = DBConnection.createConnection("controldb");
 	private Scanner sc = new Scanner(System.in);
 	private ControlDB controlDb=new ControlDB("controldb","stagingdb", "configuration");
+	private DataWarehouse dw=new DataWarehouse(cS, cC);
 	private DataProcess dp=new DataProcess();
 	
+	// Trạng thái khi dữ liệu file đã download về, cập nhật vào log_file là ER=> sẵn sàng load vào staging
 	private static final String FILE_STATUS_READY="ER";
+	// Trạng thái khi dữ liệu file đã đưa vào staging và cập nhật vào log_file là TR=> sẵn sàng transform qua warehouse
 	private static final String FILE_STATUS_TRANSFORM="TR";
+	// Trạng thái khi dữ liệu file đã đưa vào staging, nhưng bị lỗi và cập nhật vào log_file là ERRO
 	private static  final String FILE_STATUS_ERRO="ERRO";
-	private static final String FILE_STATUS_SUCCESS="SUCCESS";
+	// Khai báo tên bảng log_file
+	private static final String TABLE_LOG_FILE = "log_file";
+	// Khai báo biến để kiểm tra dữ liệu đã vào staging hay chưa?
+	private boolean isLoadedToStaging= false;
 	
 	public Staging() throws SQLException{
 		dp.setControlDb(controlDb);
 		this.pscp=new DownloadPSCP();
 		
 	}
+	// Phương thức lấy thời gian hiện tại.
+	public String getCurrentTime() {
+		DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
+		LocalDateTime now = LocalDateTime.now();
+		return dtf.format(now);
+	}
 
-	
+	// Phương thức này để cập nhật trạng thái trong log_file khi file đã download về.
 	public void loadFileStatus(DataProcess dp, String table_name, int id_config) throws SQLException{
-		String timestamp= getCurrentTime();
-		 
+	       // Lấy thời gian hiện tại.
+	       	String timestamp= getCurrentTime();
+	       // Lấy tất cả dữ liệu các trường configuration theo id_config 
 			Configuration configuration=dp.getControlDb().selectAllFieldConfigurationByConfigId((id_config));
 			String import_dir = configuration.getImport_dir();
 			int config_id = configuration.getConfig_id();
-			
+			//Lấy tất cả tên của các file đã ghi vào log_file
 			ArrayList<String> listFileNameCurrent=dp.getControlDb().selectAllFileNameInLogFile("log_file");
 
 			File imp_dir = new File(import_dir);
@@ -67,6 +85,7 @@ public class Staging {
 				if(listFile.length>0){
 				for(File f: listFile){
 					if(listFileNameCurrent.size()>0){
+						// Nếu danh sách tên file hiện tại trong log mà không chứa tên file ta muốn ghi log thì tiến hành ghi log.
 						if(!listFileNameCurrent.contains(f.getName())){
 							dp.getControlDb().insertLogFileStatus(table_name, f.getName(), config_id, FILE_STATUS_READY,timestamp);
 					}
@@ -95,105 +114,84 @@ public class Staging {
 		}
 		
 	
-	public boolean extractToStagingDB(DataProcess dp, int id_config) throws SQLException{
-			
+	public boolean extractToStagingDB(DataProcess dp, int id_config) throws SQLException, NumberFormatException, ParseException{
+		// Lấy dữ liệu các trường từ bảng configuration theo id_config 
 		Configuration configuration = dp.getControlDb().selectAllFieldConfigurationByConfigId(id_config);
 		System.out.println(configuration.toString());
-			
 		String target_table = configuration.getTarget_table();
 		String import_dir = configuration.getImport_dir();
 		String success_dir= configuration.getSuccess_dir();
 		String error_dir = configuration.getError_dir();
 		String delim = configuration.getDelimmiter();
 		String column_list =  configuration.getColumn_list();
-		String column_list_format= configuration.getColumn_list_format();
-		
-//		if (!dp.getControlDb().tableExists(target_table)) {
-//			System.out.println(column_list_format);
-//			dp.getControlDb().createTable(target_table, column_list_format, column_list);
-//		}
-		
-		//System.out.println(import_dir);
-		StringTokenizer strToken= new StringTokenizer(column_list,",");
+		StringTokenizer strToken= new StringTokenizer(column_list, ",");
 		
 		File imp_dir = new File(import_dir);
-			String extention = "";
-			File[] listFile = imp_dir.listFiles();
+		File[] listFile = imp_dir.listFiles();
 			for (File file : listFile) {
-				
+				// Lấy dữ liệu các trường của bảng log_file dựa theo file_name.
 				Log_file log_file= dp.getControlDb().selectAllFieldLogFile(file.getName(), "log_file");
-				
+				// Trạng thái của file hiện tại đã ER || TR || ERRO
 				String file_status=log_file.getFile_status();
+				// Lấy ra config_id
 				int config_id= configuration.getConfig_id();
-				
+				// Từ dữ liệu log_file ta lấy ra config_id so sánh với id_config truyền vào nếu bằng nhau
+				//và trạng thái là ER (sẵn sàng load vào staging)
 				if (log_file.getData_file_config_id()==config_id&& file_status.equals(FILE_STATUS_READY)) {
 					String values = "";
+					// Kiểm tra nếu file là dạng .txt thì đọc readValuesTXT
 					if (file.getName().indexOf(".txt")!=-1 ) {
 						values = dp.readValuesTXT(file, delim, strToken.countTokens() );
-						extention = ".txt";
+						// Kiểm tra nếu file là dạng .xlsx thì đọc readValuesXLSX
 					} else if (file.getName().indexOf(".xlsx")!=-1) {
 						try {
 							values = dp.readValuesXLSX(file, strToken.countTokens());
 						} catch (org.apache.poi.openxml4j.exceptions.NotOfficeXmlFileException e) {
 							System.out.println(e.getMessage());
 						}
-						extention = ".xlsx";
 					}
+					// Kiểm tra nếu file là dạng .csv thì đọc readValuesCSV
 					else if(file.getName().indexOf(".csv")!=-1){
-						try {
-							values = dp.readValuesXLSX(file, strToken.countTokens());
-						} catch (org.apache.poi.openxml4j.exceptions.NotOfficeXmlFileException e) {
-							System.out.println(e.getMessage());
-						}
-						extention = ".csv";
+						System.out.println("CSV");
 					}
-						
-				
-					
-					if (values != null) {
-						String table = "log_file";
-						// count line
-						String stagin_load_count = "";
-						try {
-							stagin_load_count = countLines(file, extention) + "";
-						} catch (InvalidFormatException
-								| org.apache.poi.openxml4j.exceptions.InvalidFormatException e) {
-							e.printStackTrace();
-						}
+					// Nếu dữ liệu đọc được khác null và không rỗng
+					if (values != null && !values.isEmpty()) {
 						String timestamp= getCurrentTime();
-						 
-						if (dp.writeDataToStagingDB(column_list, target_table, values)) {
-							System.out.println(file.getName()+"TR");
-							file_status = FILE_STATUS_TRANSFORM; 
-							
-							if (moveFile(success_dir, file)){
-							int id_file=dp.getControlDb().selectIDFile("data_file_id", "log_file", file.getName());
-							//dw.loadToDW(id_file);
-							System.out.println(timestamp);
-							dp.getControlDb().updateLogAfterLoadingIntoStagingDB(table, file_status,  timestamp, stagin_load_count, file.getName());
-							}
-						;
-
-						} else {
-							file_status = FILE_STATUS_ERRO;
-							System.out.println(file.getName()+ "ERRO");
-							System.out.println(timestamp);
-							if (moveFile(error_dir, file))
-						    dp.getControlDb().updateLogAfterLoadingIntoStagingDB(table, file_status, timestamp, stagin_load_count, file.getName());
-								;
-
-						}
+						String staging_load_count= dp.getRows()+ "";
+						// Tiến hành ghi dữ
+						controlDb.truncateTable(controlDb.getTarget_db_name(), target_table);
+						isLoadedToStaging= dp.writeDataToStagingDB(column_list, target_table, values);
+						// Hậu xử lý sau khi đã load vào staging ( di chuyển file, ghi log)
+						post_processing(success_dir, error_dir,  file, timestamp, staging_load_count); 
 					}
 					 
 				}
 			}
 		return false;
 	}
-	public String getCurrentTime() {
-		DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
-		LocalDateTime now = LocalDateTime.now();
-		return dtf.format(now);
+	public void post_processing(String success_dir, String error_dir, File file, String timestamp, String staging_load_count) throws NumberFormatException, ParseException, SQLException{
+		if(isLoadedToStaging){
+			if (moveFile(success_dir, file)){
+				// Lấy id_file dựa vào fileName cung cấp cho bước 3, để load vào warehouse dựa vào id.
+				System.out.println(file.getName()+ ": TR");
+				System.out.println(timestamp);
+				// Cập nhật log_file sau khi đưa vào staging khi thành công trạng thái là TR: sẵn sàng cho transform bước 3.
+				dp.getControlDb().updateLogAfterLoadingIntoStagingDB(TABLE_LOG_FILE, FILE_STATUS_TRANSFORM, timestamp, staging_load_count, file.getName());
+				int id_file=dp.getControlDb().selectIDFile("data_file_id", TABLE_LOG_FILE, file.getName());
+				dw.loadToDW(id_file);
+			  }
+		}
+		 else{
+			System.out.println(file.getName()+ ": ERRO");
+			System.out.println(timestamp);
+			if (moveFile(error_dir, file))
+			// Cập nhật log_file sau khi đưa vào staging khi thất bại trạng thái là ERROR.
+		    dp.getControlDb().updateLogAfterLoadingIntoStagingDB(TABLE_LOG_FILE, FILE_STATUS_ERRO, timestamp, staging_load_count, file.getName());
+		}
+		
 	}
+	// Phương thức thực hiện di chuyển file vào thư mục khác, sau khi ghi vào staging.
+	// target_dir là thư mục muốn di chuyển: error_dir (khi ghi vào staging thành công), success_dir ( khi ghi vào staging thất bại).
 	private boolean moveFile(String target_dir, File file) {
 		try {
 			BufferedInputStream bReader = new BufferedInputStream(new FileInputStream(file));
@@ -215,57 +213,18 @@ public class Staging {
 		}
 	}
 
-	private int countLines(File file, String extention)
-			throws InvalidFormatException, org.apache.poi.openxml4j.exceptions.InvalidFormatException {
-		int result = 0;
-		XSSFWorkbook workBooks = null;
-		try {
-			if (extention.indexOf(".txt") != -1) {
-				BufferedReader bReader = new BufferedReader(new InputStreamReader(new FileInputStream(file)));
-				String line;
-				while ((line = bReader.readLine()) != null) {
-					if (!line.trim().isEmpty()) {
-						result++;
-					}
-				}
-				bReader.close();
-			} else if (extention.indexOf(".xlsx") != -1) {
-				workBooks = new XSSFWorkbook(file);
-				XSSFSheet sheet = workBooks.getSheetAt(0);
-				Iterator<Row> rows = sheet.iterator();
-				rows.next();
-				while (rows.hasNext()) {
-					rows.next();
-					result++;
-				}
-				return result;
-			}
-
-		} catch (IOException | org.apache.poi.openxml4j.exceptions.InvalidFormatException e) {
-			e.printStackTrace();
-		} finally {
-			if (workBooks != null) {
-				try {
-					workBooks.close();
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-			}
-		}
-		return result;
-	}
 	
 	public void id_SCP_download(int id_scp) throws SQLException{
-		pscp.downloadFilePSCP(id_scp);
+	//	pscp.downloadFilePSCP(id_scp);
 		PSCPProcess pscp=new PSCPProcess();
 		SCP_DownLoad scp_download=  pscp.selectAllField(id_scp, "scp_download");
 		loadFileStatus(dp, "log_file", scp_download.getConfig_id());
 	}
-	public void userInputToDownload() throws NumberFormatException, SQLException{
+	public void userInputToDownload() throws NumberFormatException, SQLException, ParseException{
 		while(true){
 			
 			String user="Nhap ma scp muon download.\n"
-					+ "1. student \n"
+					+ "1. sinhvien \n"
 					+ "2. monhoc\n"
 					+ "3. lophoc\n"
 					+ "4. dangky\n"
@@ -300,10 +259,10 @@ public class Staging {
 			
 		}
 	}
-	public void userInputToExtractStaging() throws NumberFormatException, SQLException{
+	public void userInputToExtractStaging() throws NumberFormatException, SQLException, ParseException{
 		while(true){
-			String user="Nhap ma can extract vao staging.\n"
-					+ "1. student \n"
+			String user="Nhap ma can dua vao staging.\n"
+					+ "1. sinhvien \n"
 					+ "2. monhoc\n"
 					+ "3. lophoc\n"
 					+ "4. dangky\n"
@@ -320,7 +279,7 @@ public class Staging {
 		}
 	}
 	
-	public static void main(String[] args) throws SQLException {
+	public static void main(String[] args) throws SQLException, NumberFormatException, ParseException {
 		Staging staging=new Staging();
 		staging.userInputToDownload();
        //loadToDW(int id_file);
