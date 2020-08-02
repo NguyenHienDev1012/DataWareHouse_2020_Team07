@@ -1,3 +1,4 @@
+
 package etl;
 
 import java.io.BufferedReader;
@@ -26,11 +27,12 @@ import utils.ControlDB;
 
 
 public class DataProcess {
-	static final String NUMBER_REGEX = "^[0-9]+$";
+	public static final String NUMBER_REGEX = "^[0-9]+$";
 	private ControlDB controlDb;
-	static final String DATE_FORMAT = "yyyy-MM-dd";
-	private static final String ACTIVED_DATE="31-12-2013";
-	private String readLines(String value, String delim) {
+	public static final String DATE_FORMAT = "yyyy-MM-dd";
+	public static int rows= 0;
+	
+	public String readLines(String value, String delim) {
 		String values = "";
 		StringTokenizer stoken = new StringTokenizer(value, delim);
 		int countToken = stoken.countTokens();
@@ -52,15 +54,19 @@ public class DataProcess {
 
 	public String readValuesTXT(File s_file, String delim, int field_quantity) {
 		String values = "";
+		int countRows=0;
 		try {
 			BufferedReader bReader = new BufferedReader(new InputStreamReader(new FileInputStream(s_file)));
 			String line;
 			line=bReader.readLine();
 			while ((line = bReader.readLine()) != null) {
+				countRows++;
 				System.out.println(line);
 				values += readLines(line, delim);
 			}
 			bReader.close();
+			setRows(countRows);
+			countRows= 0;
 			return values.substring(0, values.length() - 1);
 
 		} catch (NoSuchElementException | IOException e) {
@@ -73,6 +79,7 @@ public class DataProcess {
 		String values = "";
 		String value = "";
 		String delim = "|";
+		int countRows= 0;
 		try {
 			FileInputStream fileIn = new FileInputStream(s_file);
 			XSSFWorkbook workBook = new XSSFWorkbook(fileIn);
@@ -83,6 +90,7 @@ public class DataProcess {
 				rows = sheet.iterator();
 			}
 			while (rows.hasNext()) {
+				countRows++;
 				Row row = rows.next();
 				
 				for (int i = 0; i <field_quantity; i++) {
@@ -121,7 +129,8 @@ public class DataProcess {
 				values += readLines(value, delim);
 				value = "";
 			}
-			
+			setRows(countRows);
+			countRows= 0;
 			workBook.close();
 			fileIn.close();
 			return values.substring(0, values.length() - 1);
@@ -134,6 +143,12 @@ public class DataProcess {
 		if (controlDb.insertValues(column_list, values, target_table))
 			return true;
 		return false;
+	}
+	public int getRows(){
+		return rows;
+	}
+	public int setRows(int inputrRows){
+		return rows= inputrRows;
 	}
 
 	public ControlDB getControlDb() {
