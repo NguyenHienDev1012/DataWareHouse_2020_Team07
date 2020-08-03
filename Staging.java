@@ -320,7 +320,7 @@ public class Staging {
 
 	public static void main(String[] args) throws SQLException {
 		Staging staging = new Staging();
-		staging.extractToStagingDB(2);
+		staging.extractToStagingDB(1);
 //		staging.userInputToDownload();
 		// loadToDW(int id_file);
 

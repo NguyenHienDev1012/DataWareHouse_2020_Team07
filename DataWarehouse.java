@@ -4,6 +4,7 @@ package dw;
 // định comment tiếng anh mà làm biếng nên thôi, dẹp đê!
 
 import java.sql.Connection;
+import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -15,9 +16,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
-
-import org.apache.poi.sl.usermodel.PaintStyle.SolidPaint;
-
 import utils.ControlDB;
 import utils.DBConnection;
 
@@ -124,9 +122,6 @@ public class DataWarehouse {
 				System.out.println("Load to dim success");
 				controlDB.updateLogAfterLoadingIntoDW(currIDFile, DataWarehouse.TRANSFORM_SUCCESS);
 				connDW.commit();
-//				// clear list 
-//				fields.clear();
-//				formatFields.clear();
 			}
 			if (!isDim) { // data fact
 				String sqlInfor = "Select * from config_fact where Name_Fact =  N'" + tableDW + "'";
@@ -147,8 +142,8 @@ public class DataWarehouse {
 			System.out.println("load to dw err");
 			controlDB.updateLogAfterLoadingIntoDW(currIDFile, DataWarehouse.TRANSFORM_FAIL);
 		}
-		
-		// clear list 
+
+		// clear list
 		fields.clear();
 		formatFields.clear();
 		referenceDims.clear();
@@ -159,7 +154,7 @@ public class DataWarehouse {
 	// reference
 	// dim ) cho là natural key. còn các measurements thì chưa rõ nên mình chưa
 	// làm
-	// CHƯA XONG, ĐANG PHÂN VÂN LỠ LOAD TRÙNG THÌ SAO, CÓ XÓA KHÔNG, 
+	// CHƯA XONG, ĐANG PHÂN VÂN LỠ LOAD TRÙNG THÌ SAO, CÓ XÓA KHÔNG,
 	private void loadToFact(ResultSet rsStaging) throws SQLException, NumberFormatException, ParseException {
 
 		// insert vào fact theo các tên NK
@@ -169,7 +164,7 @@ public class DataWarehouse {
 		while (rsStaging.next()) {
 			// kiểm tra nếu trùng thì bỏ qua ( bản fact không dùng update)
 			String sqlCheck = "Select  * from " + tableDW + " where " + nkField + " = " + rsStaging.getString(nkField)
-			+ " and date_expire = '9999-12-31'";
+					+ " and date_expire = '9999-12-31'";
 		}
 		setValuesFact(rsStaging, prFact, referenceDims);
 
@@ -202,11 +197,20 @@ public class DataWarehouse {
 		String[] mark = getFieldDimMasks();
 		String sqlDim = "insert into " + tableDW + mark[0] + " values " + mark[1];
 		PreparedStatement prDim = connDW.prepareStatement(sqlDim);
-		while (rsStaging.next()) {
+		boolean checkNext = false;
+		while (checkNext = rsStaging.next()) {
 			// kiểm tra mới, trùng hay update
+//			System.out.println("check next " +checkNext);
+			System.out.println(" in rsStaging: " + rsStaging.getString(1) + "\t" + rsStaging.getString(2) + "\t"
+					+ rsStaging.getString(3) + "\t");
 			String sqlCheck = "Select  * from " + tableDW + " where " + nkField + " = " + rsStaging.getString(nkField)
-					+ " and date_expire = '9999-12-31'";
+					+ " and date_expire = '20/06/2013'";
 			System.out.println(sqlCheck);
+			System.out.println(rsStaging.getString(nkField));
+			if (rsStaging.getString(nkField).isEmpty()) {
+				System.out.println("rong");
+				continue;
+			}
 			Statement stCheck = connDW.createStatement();
 //			System.out.println(sqlCheck);
 			ResultSet rsCheck = stCheck.executeQuery(sqlCheck);
@@ -215,7 +219,7 @@ public class DataWarehouse {
 
 				setValuesDim(rsStaging, prDim);
 				prDim.execute();
-				continue;
+//				continue;
 			} else {
 				// đã có dữ liệu -> kiểm tra có phải update hay không
 				if (isUpdate(rsStaging, rsCheck)) {
@@ -246,16 +250,19 @@ public class DataWarehouse {
 				continue;
 			case "date":
 				java.util.Date date1 = dateFormat.parse(rsStaging.getNString(fields.get(i)));
+//				
 				prDim.setTimestamp(i + 1, new Timestamp(date1.getTime()));
+
 				continue;
 			default:
 				break;
 			}
+
 		}
 		// set date_expire
 //		prDim.setTimestamp(formatFields.size() + 1, java.sql.Timestamp.valueOf(java.time.LocalDateTime.of(9999, 12, 31, 6, 6)));
 		prDim.setTimestamp(formatFields.size() + 1,
-				java.sql.Timestamp.valueOf(java.time.LocalDateTime.of(9999, 12, 31, 6, 6)));
+				java.sql.Timestamp.valueOf(java.time.LocalDateTime.of(2013, 6, 20, 6, 6)));
 	}
 
 	private String[] getFieldDimMasks() {
@@ -298,7 +305,6 @@ public class DataWarehouse {
 
 	private boolean isUpdate(ResultSet rsStaging, ResultSet rsCheck) throws SQLException {
 		// cgir có 1 dòng dữ liệu thôi
-		System.out.println("size formatFields : " + formatFields.size());
 		List<String> listStaging = new LinkedList<String>();
 		List<String> listDW = new LinkedList<String>();
 		for (int i = 0; i < formatFields.size(); i++) {
@@ -349,7 +355,7 @@ public class DataWarehouse {
 		Connection cS = DBConnection.createConnection("stagingdb");
 		Connection cC = DBConnection.createConnection("controldb");
 		DataWarehouse dw = new DataWarehouse(cS, cC);
-		dw.loadToDW(1);
+		dw.loadToDW(2);
 
 	}
 
