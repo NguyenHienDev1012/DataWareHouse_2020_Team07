@@ -204,7 +204,7 @@ public class DataWarehouse {
 			System.out.println(" in rsStaging: " + rsStaging.getString(1) + "\t" + rsStaging.getString(2) + "\t"
 					+ rsStaging.getString(3) + "\t");
 			String sqlCheck = "Select  * from " + tableDW + " where " + nkField + " = " + rsStaging.getString(nkField)
-					+ " and date_expire = '20/06/2013'";
+					+ " and date_expire = 20/06/2013";
 			System.out.println(sqlCheck);
 			System.out.println(rsStaging.getString(nkField));
 			if (rsStaging.getString(nkField).isEmpty()) {
