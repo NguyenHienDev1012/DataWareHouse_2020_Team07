@@ -33,6 +33,7 @@ public class DataWarehouse {
 	int idTarget;
 	List<String> fields;
 	List<String> formatFields;
+	List<String> referenceDims;
 	SimpleDateFormat dateFormat;
 	java.util.Date utilDate;
 	// chuẩn bị dữ liệu cho câu sql
@@ -50,6 +51,7 @@ public class DataWarehouse {
 		nkField = "";
 		fields = new ArrayList<String>();
 		formatFields = new ArrayList<String>();
+		referenceDims = new ArrayList<String>();
 //		dateFormat = new SimpleDateFormat("yyyy-MM-dd");
 		dateFormat = new SimpleDateFormat("dd/MM/yyyy");
 		utilDate = new java.util.Date();
@@ -95,7 +97,7 @@ public class DataWarehouse {
 
 			isDim = (rsF.getInt("is_Dim") == 1); // xác định dữ liệu là dim
 													// or fact
-			System.out.println( " is dim : " + isDim);
+			System.out.println(" is dim : " + isDim);
 			idTarget = rsF.getInt("Id_Target_Table"); // xác định target
 														// table của nó là
 														// đâu
@@ -104,53 +106,52 @@ public class DataWarehouse {
 			reS.next();
 			tableStaging = reS.getString("Name_Staging");
 			tableDW = reS.getString("Name_Table_Target");
-			if (isDim) {
+			// tạo statement để kết nối với staging
+			Statement smStaging = connStaging.createStatement();
+			String sqlS = "SELECT  *  FROM " + tableStaging;
+			ResultSet rsStaging = smStaging.executeQuery(sqlS);
+
+			if (isDim) { // data input is dim
+				// definite nkField, Fields, FormatFields
 				String sqlInfor = "Select * from config_dim where Name_Dim = N'" + tableDW + "'";
 				ResultSet rsInfor = stateC.executeQuery(sqlInfor);
 				rsInfor.next();
 				nkField = rsInfor.getNString("NK_Field");
 				fields.addAll(Arrays.asList(rsInfor.getNString("List_Fields").split(",")));
 				formatFields.addAll(Arrays.asList(rsInfor.getNString("List_Formats").split(",")));
-			}
-			// if (!isDim) { // data fact
-			// String sqlInfor = "Select * from config_fact where Name_Fact =
-			// N'" + tableDW + "'";
-			// ResultSet rsInfor = stateC.executeQuery(sqlInfor);
-			// rsInfor.next();
-			// nkField = rsInfor.getNString("NK_Field");
-			// fields.addAll(Arrays.asList(rsInfor.getNString("List_Fields").split(",")));
-			// formatFields.addAll(Arrays.asList(rsInfor.getNString("List_Formats").split(",")));
-			// }
-			// tạo statement config
-			// tạo statement để kết nối với staging
-			Statement smStaging = connStaging.createStatement();
-			String sqlS = "SELECT  *  FROM " + tableStaging;
-			ResultSet rsStaging = smStaging.executeQuery(sqlS);
-			if (isDim) {
+				// load to dw
 				loadToDim(rsStaging);
-//				System.out.println("Sf/segsdsd");
-//				System.out.println(currIDFile + "UUUUU");
-				// controlDB.updateLogAfterLoadingIntoDW(2,"UU");
 				System.out.println("Load to dim success");
 				controlDB.updateLogAfterLoadingIntoDW(currIDFile, DataWarehouse.TRANSFORM_SUCCESS);
 				connDW.commit();
-				fields.clear();
-				formatFields.clear();
-				//truncateStaging();
+//				// clear list 
+//				fields.clear();
+//				formatFields.clear();
+			}
+			if (!isDim) { // data fact
+				String sqlInfor = "Select * from config_fact where Name_Fact =  N'" + tableDW + "'";
+				ResultSet rsInfor = stateC.executeQuery(sqlInfor);
+				rsInfor.next();
+				referenceDims.addAll(Arrays.asList(rsInfor.getNString("Reference_Dims").split(",")));
+				loadToFact(rsStaging);
+				System.out.println("Load to fact success");
+				controlDB.updateLogAfterLoadingIntoDW(currIDFile, DataWarehouse.TRANSFORM_SUCCESS);
+				connDW.commit();
+//				referenceDims.clear();
 
 			}
-			// System.out.println(" load to dim xong");
-			// loadToFact(rsStaging);
-			// }
+
 		} catch (SQLException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 			connDW.rollback();
-//			System.out.println(currIDFile + "AAA");
-			System.out.println("load to dim err");
+			System.out.println("load to dw err");
 			controlDB.updateLogAfterLoadingIntoDW(currIDFile, DataWarehouse.TRANSFORM_FAIL);
-//			System.out.println("Lỗi");
 		}
+		
+		// clear list 
+		fields.clear();
+		formatFields.clear();
+		referenceDims.clear();
 
 	}
 
@@ -158,46 +159,19 @@ public class DataWarehouse {
 	// reference
 	// dim ) cho là natural key. còn các measurements thì chưa rõ nên mình chưa
 	// làm
+	// CHƯA XONG, ĐANG PHÂN VÂN LỠ LOAD TRÙNG THÌ SAO, CÓ XÓA KHÔNG, 
 	private void loadToFact(ResultSet rsStaging) throws SQLException, NumberFormatException, ParseException {
-		Statement smControll = connControll.createStatement();
-		String sqlconfigFact = "SELECT * FROM config_fact ";
-		ResultSet rsConfigFact = smControll.executeQuery(sqlconfigFact);
-		// lấy các giá trị config
-		String nameFact = "";
-		List<String> tableReferences = new ArrayList<String>();
-		// measurement hiện h vẫn chưa đụng chạm nên mình coi như nó là danh
-		// sách các
-		// trường có giá trị int.
-		List<String> measurements = new ArrayList<String>();
-		List<String> listNKReference = new ArrayList<String>();
-		while (rsConfigFact.next()) {
-			// lấy thông tin bảng Dim
-			nameFact = rsConfigFact.getNString("Table_name");
-			tableReferences.addAll(Arrays.asList(rsConfigFact.getNString("Table_references").split(",")));
 
-			// measurements.addAll(Arrays.asList(rsConfigFact.getNString("Measurements").split(",")));
-			String[] measuremants = rsConfigFact.getNString("Measurements").split(",");
-
-			// từng fact kết nối với từng config dim của nó để lấy các tên
-			// trường Natural
-			// Key
-			for (String dimName : tableReferences) {
-				Statement smConfigDim = connControll.createStatement();
-				String sqlConfigDim = "SELECT * FROM config_dim WHERE Table_name = " + dimName;
-				ResultSet rsDim = smConfigDim.executeQuery(sqlConfigDim);
-				// hiện h mình coi như là natural key chỉ có 1 cho mỗi dim (
-				// không phải
-				// composite key)
-				rsDim.next();
-				// add nk đó vào danh sách các NK
-				listNKReference.add(rsDim.getNString(1));
-			}
-			// insert vào fact theo các tên NK
-			String[] arrSQL = getFieldFactMasks(listNKReference, measurements);
-			String sqlFact = "INSERT INTO " + nameFact + arrSQL[0] + "values" + arrSQL[1];
-			PreparedStatement prFact = connDW.prepareStatement(sqlFact);
-			setValuesFact(rsStaging, prFact, listNKReference);
+		// insert vào fact theo các tên NK
+		String[] arrSQL = getFieldFactMasks(referenceDims);
+		String sqlFact = "INSERT INTO " + tableDW + arrSQL[0] + "values" + arrSQL[1];
+		PreparedStatement prFact = connDW.prepareStatement(sqlFact);
+		while (rsStaging.next()) {
+			// kiểm tra nếu trùng thì bỏ qua ( bản fact không dùng update)
+			String sqlCheck = "Select  * from " + tableDW + " where " + nkField + " = " + rsStaging.getString(nkField)
+			+ " and date_expire = '9999-12-31'";
 		}
+		setValuesFact(rsStaging, prFact, referenceDims);
 
 	}
 
@@ -207,7 +181,7 @@ public class DataWarehouse {
 	}
 
 	// methold này còn chưa hoàn thiện vì cái measurement
-	private String[] getFieldFactMasks(List<String> listNKReference, List<String> measurements) {
+	private String[] getFieldFactMasks(List<String> listNKReference) {
 		String f = " (";
 		String v = " (";
 		// lấy nhãnh các trường NK
@@ -215,11 +189,6 @@ public class DataWarehouse {
 			f += s + ",";
 			v += "?,";
 		}
-		// measurement chưa làm
-		for (String s : measurements) {
-			// TODO some thing
-		}
-		//
 		// thêm trường Id_File
 		f += "ID_File) ";
 		v += "?) ";
@@ -237,15 +206,10 @@ public class DataWarehouse {
 			// kiểm tra mới, trùng hay update
 			String sqlCheck = "Select  * from " + tableDW + " where " + nkField + " = " + rsStaging.getString(nkField)
 					+ " and date_expire = '9999-12-31'";
-			// System.out.println(sqlCheck);
+			System.out.println(sqlCheck);
 			Statement stCheck = connDW.createStatement();
 //			System.out.println(sqlCheck);
 			ResultSet rsCheck = stCheck.executeQuery(sqlCheck);
-			// while(rsCheck.next()) {
-			// System.out.println("giá trị trùng :" + rsCheck.getString(1)+
-			// rsCheck.getString(2)+"\t"+ rsCheck.getString(3)+"\t"+
-			// rsCheck.getString(4)+"\t");
-			// }
 			if (!rsCheck.next()) { // chưa có dữ liệu, load new
 				System.out.println("load new ");
 
@@ -266,12 +230,6 @@ public class DataWarehouse {
 				}
 			}
 		}
-
-		// rsStaging bây h coi như là 1 dòng dữ liệu, không.next ở đoạn này
-
-		// reset lại 2 cái list và tên
-		// fields.clear();
-		// formatFields.clear();
 
 	}
 
@@ -295,6 +253,7 @@ public class DataWarehouse {
 			}
 		}
 		// set date_expire
+//		prDim.setTimestamp(formatFields.size() + 1, java.sql.Timestamp.valueOf(java.time.LocalDateTime.of(9999, 12, 31, 6, 6)));
 		prDim.setTimestamp(formatFields.size() + 1,
 				java.sql.Timestamp.valueOf(java.time.LocalDateTime.of(9999, 12, 31, 6, 6)));
 	}
@@ -339,11 +298,11 @@ public class DataWarehouse {
 
 	private boolean isUpdate(ResultSet rsStaging, ResultSet rsCheck) throws SQLException {
 		// cgir có 1 dòng dữ liệu thôi
-		System.out.println("size formatFields : "+ formatFields.size());
+		System.out.println("size formatFields : " + formatFields.size());
 		List<String> listStaging = new LinkedList<String>();
 		List<String> listDW = new LinkedList<String>();
 		for (int i = 0; i < formatFields.size(); i++) {
-			listStaging.add(rsStaging.getString(i + 1)); 
+			listStaging.add(rsStaging.getString(i + 1));
 //			 resutset staging bắt đầu từ 1 còn cái rsCheck vì nó lấy dư 1 trường sk nên +1 => =  +2
 			switch (formatFields.get(i)) {
 			case "int":
