@@ -197,16 +197,16 @@ public class DataWarehouse {
 		String[] mark = getFieldDimMasks();
 		String sqlDim = "insert into " + tableDW + mark[0] + " values " + mark[1];
 		PreparedStatement prDim = connDW.prepareStatement(sqlDim);
-		boolean checkNext = false;
+		boolean checkNext;
 		while (checkNext = rsStaging.next()) {
 			// kiểm tra mới, trùng hay update
 //			System.out.println("check next " +checkNext);
-			System.out.println(" in rsStaging: " + rsStaging.getString(1) + "\t" + rsStaging.getString(2) + "\t"
-					+ rsStaging.getString(3) + "\t");
-			String sqlCheck = "Select  * from " + tableDW + " where " + nkField + " = " + rsStaging.getString(nkField)
-					+ " and date_expire = 20/06/2013";
-			System.out.println(sqlCheck);
-			System.out.println(rsStaging.getString(nkField));
+//			System.out.println(" in rsStaging: " + rsStaging.getString(1) + "\t" + rsStaging.getString(2) + "\t"
+//					+ rsStaging.getString(3) + "\t");
+			String sqlCheck = "Select  * from " + tableDW + " where " + nkField + " = '" + rsStaging.getString(nkField)
+					+ "' and date_expire = Date('9999-12-31')";
+//			System.out.println(sqlCheck);
+//			System.out.println(rsStaging.getString(nkField));
 			if (rsStaging.getString(nkField).isEmpty()) {
 				System.out.println("rong");
 				continue;
@@ -249,7 +249,7 @@ public class DataWarehouse {
 				prDim.setNString(i + 1, rsStaging.getNString(fields.get(i)));
 				continue;
 			case "date":
-				java.util.Date date1 = dateFormat.parse(rsStaging.getNString(fields.get(i)));
+				java.util.Date date1 = dateFormat.parse(rsStaging.getString(fields.get(i)));
 //				
 				prDim.setTimestamp(i + 1, new Timestamp(date1.getTime()));
 
@@ -262,7 +262,7 @@ public class DataWarehouse {
 		// set date_expire
 //		prDim.setTimestamp(formatFields.size() + 1, java.sql.Timestamp.valueOf(java.time.LocalDateTime.of(9999, 12, 31, 6, 6)));
 		prDim.setTimestamp(formatFields.size() + 1,
-				java.sql.Timestamp.valueOf(java.time.LocalDateTime.of(2013, 6, 20, 6, 6)));
+				java.sql.Timestamp.valueOf(java.time.LocalDateTime.of(9999, 12, 31, 6, 6)));
 	}
 
 	private String[] getFieldDimMasks() {
@@ -277,30 +277,6 @@ public class DataWarehouse {
 		v += "?) ";
 		String[] result = { f, v };
 		return result;
-	}
-
-	private void prepareQuery(int idFile) throws SQLException {
-		Statement stateC = connControll.createStatement();
-		String sqlC = "SELECT * FROM configuration WHERE config_id = " + idFile;
-		ResultSet rsConfig = stateC.executeQuery(sqlC);
-		rsConfig.next();
-		isDim = (rsConfig.getInt("is_Dim") == 1); // xác định dữ liệu là dim or
-													// fact
-		idTarget = rsConfig.getInt("Id_Target_Table"); // xác định target table
-														// của nó là đâu
-		String sql = "Select * from config_staging Where Id = " + idTarget;
-		ResultSet reS = stateC.executeQuery(sql);
-		reS.next();
-		tableStaging = reS.getString("Name_Staging");
-		tableDW = reS.getString("Name_Table_Target");
-		if (isDim) {
-			String sqlInfor = "Select * from config_dim where Name_Dim = N'" + tableDW + "'";
-			ResultSet rsInfor = stateC.executeQuery(sqlInfor);
-			rsInfor.next();
-			nkField = rsInfor.getNString("NK_Field");
-			fields.addAll(Arrays.asList(rsInfor.getNString("List_Fields").split(",")));
-			formatFields.addAll(Arrays.asList(rsInfor.getNString("List_Formats").split(",")));
-		}
 	}
 
 	private boolean isUpdate(ResultSet rsStaging, ResultSet rsCheck) throws SQLException {
@@ -320,7 +296,7 @@ public class DataWarehouse {
 				// break;
 				continue;
 			case "date":
-				listDW.add(rsCheck.getDate(i + 2) + "");
+				listDW.add(dateFormat.format(rsCheck.getDate(i + 2)) + "");
 				// listDW.add(rsCheck.getTimestamp(i +2) +"");
 				continue;
 			default:
@@ -329,7 +305,7 @@ public class DataWarehouse {
 		}
 		for (int i = 0; i < listStaging.size(); i++) {
 			if (!listStaging.get(i).equalsIgnoreCase(listDW.get(i))) {
-				System.out.println("values isnt equals " + listStaging.get(i) + " =!=== " + listDW.get(i));
+//				System.out.println("values isnt equals " + listStaging.get(i) + " =!=== " + listDW.get(i));
 				return true;
 			}
 		}
@@ -339,15 +315,10 @@ public class DataWarehouse {
 	}
 
 	private void setExpireDate(String id) throws SQLException {
-		String sql = "UPDATE " + tableDW + " SET date_expire = CURDATE() " + "  WHERE  " + nkField + "  = " + id;
+		String sql = "UPDATE " + tableDW + " SET date_expire = Date('2013-06-30') " + "  WHERE  " + nkField + "  = "
+				+ id;
 		Statement st = connDW.createStatement();
 		st.execute(sql);
-
-	}
-
-	private void truncateStaging() throws SQLException {
-		String sqlTruncate = "TRUNCATE " + tableStaging;
-		connStaging.createStatement().execute(sqlTruncate);
 
 	}
 
@@ -355,7 +326,7 @@ public class DataWarehouse {
 		Connection cS = DBConnection.createConnection("stagingdb");
 		Connection cC = DBConnection.createConnection("controldb");
 		DataWarehouse dw = new DataWarehouse(cS, cC);
-		dw.loadToDW(2);
+		dw.loadToDW(7);
 
 	}
 
