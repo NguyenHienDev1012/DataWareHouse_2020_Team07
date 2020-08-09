@@ -4,18 +4,20 @@ package dw;
 // định comment tiếng anh mà làm biếng nên thôi, dẹp đê!
 
 import java.sql.Connection;
-import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
+import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.regex.Pattern;
+
 import utils.ControlDB;
 import utils.DBConnection;
 
@@ -50,11 +52,12 @@ public class DataWarehouse {
 		fields = new ArrayList<String>();
 		formatFields = new ArrayList<String>();
 		referenceDims = new ArrayList<String>();
-//		dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+		// dateFormat = new SimpleDateFormat("yyyy-MM-dd");
 		dateFormat = new SimpleDateFormat("dd/MM/yyyy");
 		utilDate = new java.util.Date();
 		currIDFile = 0;
 		controlDB = new ControlDB("controldb", "controldb", "log_file");
+		controlDB.loadDateDimToDW("date_dim");
 	}
 
 	// Bước 1: tạo mới DW , sử dụng lại connection staging và connection config
@@ -123,16 +126,19 @@ public class DataWarehouse {
 				controlDB.updateLogAfterLoadingIntoDW(currIDFile, DataWarehouse.TRANSFORM_SUCCESS);
 				connDW.commit();
 			}
-			if (!isDim) { // data fact
+			// data fact
+			if (!isDim) {
 				String sqlInfor = "Select * from config_fact where Name_Fact =  N'" + tableDW + "'";
 				ResultSet rsInfor = stateC.executeQuery(sqlInfor);
 				rsInfor.next();
+				// xác định nk field, reference dim
+				nkField = rsInfor.getNString("NK_Field");
 				referenceDims.addAll(Arrays.asList(rsInfor.getNString("Reference_Dims").split(",")));
 				loadToFact(rsStaging);
 				System.out.println("Load to fact success");
 				controlDB.updateLogAfterLoadingIntoDW(currIDFile, DataWarehouse.TRANSFORM_SUCCESS);
 				connDW.commit();
-//				referenceDims.clear();
+//					referenceDims.clear();
 
 			}
 
@@ -158,34 +164,84 @@ public class DataWarehouse {
 	private void loadToFact(ResultSet rsStaging) throws SQLException, NumberFormatException, ParseException {
 
 		// insert vào fact theo các tên NK
-		String[] arrSQL = getFieldFactMasks(referenceDims);
+		String[] arrSQL = getFieldFactMasks();
 		String sqlFact = "INSERT INTO " + tableDW + arrSQL[0] + "values" + arrSQL[1];
 		PreparedStatement prFact = connDW.prepareStatement(sqlFact);
+
 		while (rsStaging.next()) {
 			// kiểm tra nếu trùng thì bỏ qua ( bản fact không dùng update)
-			String sqlCheck = "Select  * from " + tableDW + " where " + nkField + " = " + rsStaging.getString(nkField)
-					+ " and date_expire = '9999-12-31'";
+			String sqlCheck = "Select  * from " + tableDW + " where " + nkField + " = '" + rsStaging.getString(nkField)
+					+ "'";
+			// đề phòng trường hợp dòng rỗng khi hêt dữ liệu !
+			if (rsStaging.getString(nkField).isEmpty() || rsStaging.getString(nkField) == "") {
+				System.out.println("rong");
+				continue;
+			}
+			Statement stCheck = connDW.createStatement();
+			ResultSet rsCheck = stCheck.executeQuery(sqlCheck);
+			if (!rsCheck.next()) { // chưa có dữ liệu, load new
+				System.out.println("load new fact");
+
+				setValuesFact(rsStaging, prFact);
+				prFact.execute();
+			}
+			//có dữ liệu rồi thì bỏ qua
+
 		}
-		setValuesFact(rsStaging, prFact, referenceDims);
 
 	}
 
-	private void setValuesFact(ResultSet rsStaging, PreparedStatement prFact, List<String> listNKReference) {
-		// TODO Auto-generated method stub
-
+	private boolean setValuesFact(ResultSet rsStaging, PreparedStatement prFact) throws SQLException, ParseException {
+		// add phần tử tương ứng với NK_Field
+		prFact.setNString(1, rsStaging.getNString(nkField));
+		for (int i = 0; i < referenceDims.size(); i++) {
+			if (!referenceDims.get(i).equalsIgnoreCase("date_dim")) {
+//				System.out.println("khong phai date dim " + rsStaging.getNString((i + 1) + 2));
+				prFact.setNString((i + 1) + 1, rsStaging.getNString((i + 1) + 2));
+				continue;
+			} else { // là date dim
+				String date = rsStaging.getString((i + 1) + 2); 
+				if (Pattern.matches("^(0[1-9]|1[012])[-/.](0[1-9]|[12][0-9]|3[01])[-/.](19|20)\\d\\d$", date)
+						|| Pattern.matches("^(19|20)\\d\\d[-/.](0[1-9]|[12][0-9]|3[01])[-/.](0[1-9]|1[012])$", date)
+						|| Pattern.matches("^[0-3]?[0-9].[0-3]?[0-9].(?:[0-9]{2})?[0-9]{2}$", date)) {
+//					DateFormat df = new SimpleDateFormat("yyyy/mm/dd");
+//					java.util.Date date1 = df.parse(date);
+				
+					SimpleDateFormat sdf1 = new SimpleDateFormat("dd/MM/yyyy");
+					SimpleDateFormat sdf2 = new SimpleDateFormat("yyyy-MM-dd");
+					String ds2 = sdf2.format(sdf1.parse(date));
+					String sqlDate = "Select date_sk from date_dim where full_date ='" +ds2+"'";
+					ResultSet rs = connDW.createStatement().executeQuery(sqlDate);
+					rs.next();
+					prFact.setString((i + 1) + 1, rs.getString("date_sk"));
+				}
+				else {
+					System.out.println("sai định dạng ");
+				}
+			}
+		}
+		// add giá trị ID file
+		prFact.setInt(referenceDims.size() + 2, currIDFile);
+		return true;
 	}
-
-	// methold này còn chưa hoàn thiện vì cái measurement
-	private String[] getFieldFactMasks(List<String> listNKReference) {
-		String f = " (";
-		String v = " (";
+	// hỗ trợ tạo câu preFact
+	private String[] getFieldFactMasks() throws SQLException {
+		// thêm cái nk field so với Dim
+		String f = " (" + nkField + ",";
+		String v = " (?,";
 		// lấy nhãnh các trường NK
-		for (String s : listNKReference) {
+		String nk = "select Name_sk_Dims from config_fact where Name_Fact = '"+ tableDW+"'";
+		Statement stm = connControll.createStatement();
+		ResultSet rs = stm.executeQuery(nk);
+		rs.next();
+		String[] nameSKDims = rs.getNString("Name_sk_Dims").split(",");
+		
+		for (String s : nameSKDims) {
 			f += s + ",";
 			v += "?,";
 		}
 		// thêm trường Id_File
-		f += "ID_File) ";
+		f += "File_ID) ";
 		v += "?) ";
 		String[] result = { f, v };
 		return result;
@@ -197,37 +253,34 @@ public class DataWarehouse {
 		String[] mark = getFieldDimMasks();
 		String sqlDim = "insert into " + tableDW + mark[0] + " values " + mark[1];
 		PreparedStatement prDim = connDW.prepareStatement(sqlDim);
-		boolean checkNext;
+		boolean checkNext = false;
 		while (checkNext = rsStaging.next()) {
 			// kiểm tra mới, trùng hay update
-//			System.out.println("check next " +checkNext);
-//			System.out.println(" in rsStaging: " + rsStaging.getString(1) + "\t" + rsStaging.getString(2) + "\t"
-//					+ rsStaging.getString(3) + "\t");
-			String sqlCheck = "Select  * from " + tableDW + " where " + nkField + " = '" + rsStaging.getString(nkField)
-					+ "' and date_expire = Date('9999-12-31')";
-//			System.out.println(sqlCheck);
-//			System.out.println(rsStaging.getString(nkField));
+			// System.out.println("check next " +checkNext);
+			System.out.println(" in rsStaging: " + rsStaging.getString(1) + "\t" + rsStaging.getString(2) + "\t"
+					+ rsStaging.getString(3) + "\t");
+			String sqlCheck = "Select  * from " + tableDW + " where " + nkField + " = " + rsStaging.getString(nkField)
+					+ " and date_expire = 20/06/2013";
 			if (rsStaging.getString(nkField).isEmpty()) {
 				System.out.println("rong");
 				continue;
 			}
 			Statement stCheck = connDW.createStatement();
-//			System.out.println(sqlCheck);
+			// System.out.println(sqlCheck);
 			ResultSet rsCheck = stCheck.executeQuery(sqlCheck);
 			if (!rsCheck.next()) { // chưa có dữ liệu, load new
 				System.out.println("load new ");
 
-				setValuesDim(rsStaging, prDim);
-				prDim.execute();
-//				continue;
+				if (setValuesDim(rsStaging, prDim))
+					prDim.execute();
+				// continue;
 			} else {
 				// đã có dữ liệu -> kiểm tra có phải update hay không
 				if (isUpdate(rsStaging, rsCheck)) {
 					System.out.println(" đã có dữ liệu, thuộc update");
 					setExpireDate(rsStaging.getString(nkField)); // set ngày
-																	// hiện tại
-					setValuesDim(rsStaging, prDim);
-					prDim.execute();
+					if (setValuesDim(rsStaging, prDim)) // hiện tại
+						prDim.execute();
 					continue;
 				} else {
 					System.out.println(" duplicate !, do nothing");
@@ -238,7 +291,7 @@ public class DataWarehouse {
 	}
 
 	// load dữ liệu vào Dim ( bỏ vào prepared statement )
-	private void setValuesDim(ResultSet rsStaging, PreparedStatement prDim)
+	private boolean setValuesDim(ResultSet rsStaging, PreparedStatement prDim)
 			throws NumberFormatException, SQLException, ParseException {
 		for (int i = 0; i < formatFields.size(); i++) {
 			switch (formatFields.get(i)) {
@@ -249,20 +302,26 @@ public class DataWarehouse {
 				prDim.setNString(i + 1, rsStaging.getNString(fields.get(i)));
 				continue;
 			case "date":
-				java.util.Date date1 = dateFormat.parse(rsStaging.getString(fields.get(i)));
-//				
-				prDim.setTimestamp(i + 1, new Timestamp(date1.getTime()));
-
-				continue;
+				String date = rsStaging.getString(fields.get(i));
+				if (Pattern.matches("^(0[1-9]|1[012])[-/.](0[1-9]|[12][0-9]|3[01])[-/.](19|20)\\d\\d$", date)
+						|| Pattern.matches("^(19|20)\\d\\d[-/.](0[1-9]|[12][0-9]|3[01])[-/.](0[1-9]|1[012])$", date)
+						|| Pattern.matches("^[0-3]?[0-9].[0-3]?[0-9].(?:[0-9]{2})?[0-9]{2}$", date)) {
+					java.util.Date date1 = dateFormat.parse(date);
+					// prDim.setString(i + 1, date);
+					prDim.setTimestamp(i + 1, new Timestamp(date1.getTime()));
+					continue;
+				} else {
+					return false;
+				}
 			default:
 				break;
 			}
 
 		}
 		// set date_expire
-//		prDim.setTimestamp(formatFields.size() + 1, java.sql.Timestamp.valueOf(java.time.LocalDateTime.of(9999, 12, 31, 6, 6)));
 		prDim.setTimestamp(formatFields.size() + 1,
-				java.sql.Timestamp.valueOf(java.time.LocalDateTime.of(9999, 12, 31, 6, 6)));
+				java.sql.Timestamp.valueOf(java.time.LocalDateTime.of(2013, 6, 20, 6, 6)));
+		return true;
 	}
 
 	private String[] getFieldDimMasks() {
@@ -285,7 +344,8 @@ public class DataWarehouse {
 		List<String> listDW = new LinkedList<String>();
 		for (int i = 0; i < formatFields.size(); i++) {
 			listStaging.add(rsStaging.getString(i + 1));
-//			 resutset staging bắt đầu từ 1 còn cái rsCheck vì nó lấy dư 1 trường sk nên +1 => =  +2
+			// resutset staging bắt đầu từ 1 còn cái rsCheck vì nó lấy dư 1
+			// trường sk nên +1 => = +2
 			switch (formatFields.get(i)) {
 			case "int":
 				listDW.add(rsCheck.getInt(i + 2) + "");
@@ -296,7 +356,7 @@ public class DataWarehouse {
 				// break;
 				continue;
 			case "date":
-				listDW.add(dateFormat.format(rsCheck.getDate(i + 2)) + "");
+				listDW.add(rsCheck.getDate(i + 2) + "");
 				// listDW.add(rsCheck.getTimestamp(i +2) +"");
 				continue;
 			default:
@@ -305,7 +365,7 @@ public class DataWarehouse {
 		}
 		for (int i = 0; i < listStaging.size(); i++) {
 			if (!listStaging.get(i).equalsIgnoreCase(listDW.get(i))) {
-//				System.out.println("values isnt equals " + listStaging.get(i) + " =!=== " + listDW.get(i));
+				System.out.println("values isnt equals " + listStaging.get(i) + " =!=== " + listDW.get(i));
 				return true;
 			}
 		}
@@ -315,7 +375,7 @@ public class DataWarehouse {
 	}
 
 	private void setExpireDate(String id) throws SQLException {
-		String sql = "UPDATE " + tableDW + " SET date_expire = Date('2013-06-30') " + "  WHERE  " + nkField + "  = "
+		String sql = "UPDATE " + tableDW + " SET date_expire = Date('2013-06-20') " + "  WHERE  " + nkField + "  = "
 				+ id;
 		Statement st = connDW.createStatement();
 		st.execute(sql);
@@ -326,8 +386,14 @@ public class DataWarehouse {
 		Connection cS = DBConnection.createConnection("stagingdb");
 		Connection cC = DBConnection.createConnection("controldb");
 		DataWarehouse dw = new DataWarehouse(cS, cC);
-		dw.loadToDW(7);
-
+		dw.loadToDW(9);
+//		System.out.println(
+//				Pattern.matches("^(0[1-9]|1[012])[-/.](0[1-9]|[12][0-9]|3[01])[-/.](19|20)\\d\\d$", "30/6/2020"));
+//		System.out.println(
+//				Pattern.matches("^(19|20)\\d\\d[-/.](0[1-9]|[12][0-9]|3[01])[-/.](0[1-9]|1[012])$", "30/6/2020"));
+//		System.out.println(
+//				Pattern.matches("^[0-3]?[0-9].[0-3]?[0-9].(?:[0-9]{2})?[0-9]{2}$", "30/6/2020"));
+		
 	}
 
 }
