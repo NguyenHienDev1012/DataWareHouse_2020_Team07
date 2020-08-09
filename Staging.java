@@ -15,7 +15,9 @@ import java.text.ParseException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.Scanner;
 import java.util.StringTokenizer;
 import java.util.zip.ZipException;
@@ -68,53 +70,8 @@ public class Staging {
 		return dtf.format(now);
 	}
 
-	// Phương thức này để cập nhật trạng thái trong log_file khi file đã download về.
-	public void loadFileStatus(DataProcess dp, String table_name, int id_config) throws SQLException{
-	       // Lấy thời gian hiện tại.
-	       	String timestamp= getCurrentTime();
-	       // Lấy tất cả dữ liệu các trường configuration theo id_config 
-			Configuration configuration=dp.getControlDb().selectAllFieldConfigurationByConfigId((id_config));
-			String import_dir = configuration.getImport_dir();
-			int config_id = configuration.getConfig_id();
-			//Lấy tất cả tên của các file đã ghi vào log_file
-			ArrayList<String> listFileNameCurrent=dp.getControlDb().selectAllFileNameInLogFile("log_file");
-
-			File imp_dir = new File(import_dir);
-			if (imp_dir.exists()) {
-				File[] listFile = imp_dir.listFiles();
-				if(listFile.length>0){
-				for(File f: listFile){
-					if(listFileNameCurrent.size()>0){
-						// Nếu danh sách tên file hiện tại trong log mà không chứa tên file ta muốn ghi log thì tiến hành ghi log.
-						if(!listFileNameCurrent.contains(f.getName())){
-							dp.getControlDb().insertLogFileStatus(table_name, f.getName(), config_id, FILE_STATUS_READY,timestamp);
-					}
-				}
-					else{
-						dp.getControlDb().insertLogFileStatus(table_name, f.getName(), config_id, FILE_STATUS_READY,timestamp);
-					}
-				}
-				
-				SendMail.sendMail(MailConfig.EMAIL_RECEIVER, "URGENT FILE INFORMATION",
-						"Load file status successfully!");
-				System.out.println("Load file status successfully!");
-			}
-				else{
-					SendMail.sendMail(MailConfig.EMAIL_RECEIVER, MailConfig.EMAIL_TITLE,
-							"No any file here to load file status!");
-					System.out.println("No any file here to load file status!");
-				}
-				
-			}
-			else{
-				System.out.println("Path not exists!!!");
-				return;
-			}
-			
-		}
-		
 	
-	public boolean extractToStagingDB(DataProcess dp, int id_config) throws SQLException, NumberFormatException, ParseException{
+	public boolean extractToStagingDB( int id_config) throws SQLException, NumberFormatException, ParseException{
 		// Lấy dữ liệu các trường từ bảng configuration theo id_config 
 		Configuration configuration = dp.getControlDb().selectAllFieldConfigurationByConfigId(id_config);
 		System.out.println(configuration.toString());
@@ -147,6 +104,7 @@ public class Staging {
 						try {
 							values = dp.readValuesXLSX(file, strToken.countTokens());
 						} catch (org.apache.poi.openxml4j.exceptions.NotOfficeXmlFileException e) {
+							SendMail.sendMail(MailConfig.EMAIL_RECEIVER, MailConfig.EMAIL_TITLE,e.getMessage());
 							System.out.println(e.getMessage());
 						}
 					}
@@ -158,7 +116,7 @@ public class Staging {
 					if (values != null && !values.isEmpty()) {
 						String timestamp= getCurrentTime();
 						String staging_load_count= dp.getRows()+ "";
-						// Tiến hành ghi dữ
+						// Tiến hành ghi dữ liệu
 						controlDb.truncateTable(controlDb.getTarget_db_name(), target_table);
 						isLoadedToStaging= dp.writeDataToStagingDB(column_list, target_table, values);
 						// Hậu xử lý sau khi đã load vào staging ( di chuyển file, ghi log)
@@ -216,15 +174,15 @@ public class Staging {
 	
 	public void id_SCP_download(int id_scp) throws SQLException{
 	//	pscp.downloadFilePSCP(id_scp);
-		PSCPProcess pscp=new PSCPProcess();
-		SCP_DownLoad scp_download=  pscp.selectAllField(id_scp, "scp_download");
-		loadFileStatus(dp, "log_file", scp_download.getConfig_id());
+		PSCPProcess pscpr=new PSCPProcess();
+		SCP_DownLoad scp_download=  pscpr.selectAllField(id_scp, "scp_download");
+		pscp.loadFileStatus(dp, "log_file", scp_download.getConfig_id());
 	}
 	public void userInputToDownload() throws NumberFormatException, SQLException, ParseException{
 		while(true){
 			
 			String user="Nhap ma scp muon download.\n"
-					+ "1. sinhvien \n"
+					+ "1. sinhvien\n"
 					+ "2. monhoc\n"
 					+ "3. lophoc\n"
 					+ "4. dangky\n"
@@ -274,15 +232,23 @@ public class Staging {
 			} catch (Exception e) {
 				userInputToDownload();
 			}
-			extractToStagingDB(dp, id_config );
+			extractToStagingDB(id_config );
 			
 		}
 	}
 	
 	public static void main(String[] args) throws SQLException, NumberFormatException, ParseException {
 		Staging staging=new Staging();
-		staging.userInputToDownload();
-       //loadToDW(int id_file);
+		PSCPProcess pscpProcess= new PSCPProcess();
+		HashMap<Integer, Integer> map= new HashMap<>();
+		map= pscpProcess.selectListIdConfigIdDownLoad("scp_download");
+		for(Map.Entry<Integer, Integer> entry : map.entrySet()) {
+		    int id_download = entry.getKey();
+		    int confid_id = entry.getValue();
+		    staging.id_SCP_download(id_download);
+		    staging.extractToStagingDB(confid_id);
+		}
+		//staging.userInputToDownload();
 	}
 }
 

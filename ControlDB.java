@@ -1,8 +1,11 @@
 package utils;
 
+import java.io.File;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 
 import com.mysql.jdbc.Connection;
@@ -10,6 +13,9 @@ import com.mysql.jdbc.Connection;
 import control.Configuration;
 import control.Log_file;
 import date_dim.Date_Dim;
+import etl.DataProcess;
+import mail.MailConfig;
+import mail.SendMail;
 
 public class ControlDB {
 	private String source_db;
@@ -19,7 +25,7 @@ public class ControlDB {
 	private ResultSet rs = null;
 	private String sql = "";
 	private Configuration configuration;
-
+	
 	public ControlDB(String source_db, String target_db_name, String table_name) {
 		this.source_db = source_db;
 		this.target_db_name = target_db_name;
@@ -77,7 +83,13 @@ public class ControlDB {
 			}
 		}
 	}
-
+	// Phương thức lấy thời gian hiện tại.
+		public String getCurrentTime() {
+			DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
+			LocalDateTime now = LocalDateTime.now();
+			return dtf.format(now);
+		}
+			
 	// Lấy tất cả các trường từ cơ sở dữ liệu từ bảng configuration dựa vào
 	// config_name
 	public Configuration selectAllFieldConfiguration(String config_name) throws SQLException {

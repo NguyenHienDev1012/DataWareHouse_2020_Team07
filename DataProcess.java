@@ -29,7 +29,7 @@ import utils.ControlDB;
 public class DataProcess {
 	public static final String NUMBER_REGEX = "^[0-9]+$";
 	private ControlDB controlDb;
-	public static final String DATE_FORMAT = "yyyy-MM-dd";
+	public static final String DATE_FORMAT = "dd/MM/yyyy";
 	public static int rows= 0;
 	
 	public String readLines(String value, String delim) {
@@ -75,6 +75,7 @@ public class DataProcess {
 		}
 	}
 
+	
 	public String readValuesXLSX(File s_file, int field_quantity)   {
 		String values = "";
 		String value = "";
@@ -139,6 +140,7 @@ public class DataProcess {
 		}
 	}
 
+	//Ghi dữ liệu vào staging db
 	public boolean writeDataToStagingDB(String column_list, String target_table, String values) {
 		if (controlDb.insertValues(column_list, values, target_table))
 			return true;
