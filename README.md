@@ -1,3 +1,4 @@
 # DataWareHouse
 DataWareHouse
-link sơ đồ https://drive.google.com/file/d/1yNNJcMOAKapOF5YNIgq_64tjj3ni-6Mm/view?usp=sharing
+link sơ đồ bước 3 :
+https://drive.google.com/file/d/1dd_pC8V09BHvbtdyp9Y21EPTcrq4x6dS/view?usp=sharing
