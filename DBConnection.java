@@ -26,20 +26,48 @@ public class DBConnection {
 			return null;
 		}
 	}
-	public static Connection createConnectionWithURLLogin(String url, String db_Name, String user,
-			String password) {
-		Connection connect= null;
-		String urls =  url+ db_Name;
-		String users = user;
-		String passwords = password;
+	@SuppressWarnings("unused")
+	public static Connection createConnectionWithLogin(String db_Name,String user, String pass) {
+		Connection con = null;
+		String url = "jdbc:mysql://localhost:3306/" + db_Name;
+
 		try {
-			Class.forName("com.mysql.jdbc.Driver");
-			connect = DriverManager.getConnection(urls, users, passwords);
-			return connect;
+			if (con == null || con.isClosed()) {
+				Class.forName("com.mysql.jdbc.Driver");
+				con = DriverManager.getConnection(url, user, pass);
+				System.out.println("connect success!");
+				return con;
+
+			} else {
+				return con;
+			}
 		} catch (SQLException | ClassNotFoundException e) {
+			System.out.println("can't connect");
 			return null;
 		}
 	}
+	@SuppressWarnings("unused")
+	public static Connection createConnectionWithURLLogin(String url, String db_Name,String user, String pass) {
+		Connection con = null;
+		String urlS =url + db_Name;
+
+		try {
+			if (con == null || con.isClosed()) {
+				Class.forName("com.mysql.jdbc.Driver");
+				con = DriverManager.getConnection(urlS, user, pass);
+				System.out.println("connect success!");
+				return con;
+
+			} else {
+				return con;
+			}
+		} catch (SQLException | ClassNotFoundException e) {
+			System.out.println("can't connect");
+			return null;
+		}
+	}
+
+
 	public static void main(String[] args) {
 		DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
 		LocalDateTime now = LocalDateTime.now();

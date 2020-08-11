@@ -1,4 +1,4 @@
-package notification;
+package mail;
 
 import java.util.Properties;
 
@@ -13,21 +13,21 @@ import javax.mail.internet.MimeMessage;
 public class SendMail {
 	public static boolean sendMail(String to, String subject, String text) {
 		Properties props = new Properties();
-		props.put("mail.smtp.ssl.trust", "smtp.gmail.com");
+		props.put("mail.smtp.ssl.trust", MailConfig.HOST_NAME);
 		props.put("mail.smtp.auth", "true");
 		props.put("mail.smtp.starttls.enable", "true");
 		props.put("mail.smtp.host", "smtp.gmail.com");
-		props.put("mail.smtp.port", "587");
+		props.put("mail.smtp.port", MailConfig.TSL_PORT);
 		Session session = Session.getInstance(props, new javax.mail.Authenticator() {
 			@Override
 			protected PasswordAuthentication getPasswordAuthentication() {
-				return new PasswordAuthentication("shoeshop.nlu@gmail.com", "shoeshop77");
+				return new PasswordAuthentication(MailConfig.EMAIL_SENDER, MailConfig.EMAIL_PASSWORD);
 			}
 		});
 		try {
 			Message message = new MimeMessage(session);
 			message.setHeader("Content-Type", "text/plain; charset=UTF-8");
-			message.setFrom(new InternetAddress("shoeshop.nlu@gmail.com"));
+			message.setFrom(new InternetAddress(MailConfig.EMAIL_SENDER));
 			message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(to));
 			message.setSubject(subject);
 			message.setText(text);
@@ -38,8 +38,5 @@ public class SendMail {
 		}
 		return true;
 
-	}
-	public static void main(String[] args) {
-		System.out.println(sendMail("nguyenthanhhien.itnlu@gmail.com", "hehe", "haha"));
 	}
 }
