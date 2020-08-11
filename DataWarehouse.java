@@ -210,6 +210,7 @@ public class DataWarehouse {
 		// add phần tử tương ứng với NK_Field
 		prFact.setNString(1, rsStaging.getNString(nkField));
 		for (int i = 0; i < referenceDims.size(); i++) {
+			// file đăng ký có trường mã lớp học không trùng với truowngf mã llowps học trong file lớp học nên kiểu gì thì cũng chả ra được :|, để tạm giá trị gốc đi
 			if (!referenceDims.get(i).equalsIgnoreCase("date_dim")) {
 				prFact.setNString((i + 1) + 1, rsStaging.getNString((i + 1) + 2));
 				continue;
